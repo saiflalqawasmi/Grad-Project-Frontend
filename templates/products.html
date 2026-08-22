@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>All Products - ScanDesk OS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-main: #f8fafc;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --border-focus: #cbd5e1;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-subtle: #94a3b8;
+
+      --primary: #2563eb;
+      --primary-light: #eff6ff;
+      --success: #16a34a;
+      --success-bg: #f0fdf4;
+      --warning: #d97706;
+      --warning-bg: #fffbeb;
+      --danger: #dc2626;
+      --danger-bg: #fef2f2;
+
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+
+      --font-sans: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-main);
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; }
+
+    .brand-icon {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      background: var(--primary);
+      color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 14px;
+    }
+
+    .brand-title { font-weight: 700; font-size: 15px; }
+    .brand-subtitle { font-size: 12px; color: var(--text-muted); }
+
+    .header-actions { display: flex; align-items: center; }
+
+    .system-badge {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600;
+      font-family: var(--font-mono);
+      padding: 6px 12px;
+      background: var(--success-bg);
+      color: var(--success);
+      border-radius: 20px;
+    }
+
+    .status-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--success);
+    }
+
+    .page-container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 20px;
+    }
+
+    .page-title { font-size: 20px; font-weight: 700; }
+    .page-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+    .catalog-meta {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+    }
+
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .product-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .product-thumb {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: cover;
+      background: var(--bg-main);
+      display: block;
+    }
+
+    .product-thumb-placeholder {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg-main);
+      color: var(--text-subtle);
+      font-size: 12px;
+    }
+
+    .product-body { padding: 12px 14px; }
+
+    .product-id {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .product-stats {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .product-stats span b { color: var(--text-main); font-family: var(--font-mono); }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .btn {
+      padding: 9px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-main);
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover { background: var(--bg-main); border-color: var(--border-focus); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+    .btn-primary:hover { background: #1d4ed8; }
+
+    .btn-secondary { background: var(--surface); }
+
+    /* Add New Scan modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      background: var(--surface);
+      border-radius: 14px;
+      width: 100%;
+      max-width: 440px;
+      padding: 24px;
+      box-shadow: var(--shadow-md);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .modal-title { font-size: 16px; font-weight: 700; }
+
+    .modal-close {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 18px;
+      color: var(--text-muted);
+      line-height: 1;
+    }
+
+    .form-group { margin-bottom: 16px; }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .form-hint {
+      font-size: 11px;
+      color: var(--text-subtle);
+      margin-top: 4px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    #scan-file-input { font-family: var(--font-sans); font-size: 13px; }
+
+    .modal-preview-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .modal-preview-grid img {
+      width: 48px; height: 48px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 20px;
+    }
+
+    .modal-status {
+      font-size: 12px;
+      margin-top: 10px;
+      min-height: 16px;
+    }
+
+    .modal-status.error { color: var(--danger); }
+    .modal-status.success { color: var(--success); }
+    .modal-status.info { color: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="brand">
+      <div class="brand-icon">AI</div>
+      <div>
+        <div class="brand-title">ScanDesk OS</div>
+        <div class="brand-subtitle">Automated Checkout Monitoring</div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <nav style="display: flex; gap: 4px; margin-right: 12px;">
+        <a href="/" style="font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--text-muted);">Dashboard</a>
+        <a href="/livecart" style="font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--text-muted);">Live Cart</a>
+        <a href="/products" style="font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--primary); background: var(--primary-light);">All Products</a>
+      </nav>
+      <div class="system-badge">
+        <span class="status-dot"></span>
+        DESK #04 : ONLINE
+      </div>
+    </div>
+  </header>
+
+  <div class="page-container">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Product Catalog</div>
+        <div class="page-subtitle">Live from <code>vectors/*.pkl</code> — the reference embeddings the matcher identifies scans against</div>
+      </div>
+      <div class="catalog-meta" id="catalog-meta">Loading catalog...</div>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+      <button id="add-scan-btn" class="btn btn-primary" type="button">+ Add New Scan</button>
+    </div>
+
+    <div id="product-grid" class="product-grid"></div>
+    <div id="empty-state" class="empty-state" style="display: none;">No products found in the catalog.</div>
+  </div>
+
+  <!-- Add New Scan Modal -->
+  <div id="scan-modal-backdrop" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Add New Scan</div>
+        <button class="modal-close" id="scan-modal-close" type="button">✕</button>
+      </div>
+
+      <form id="scan-form">
+        <div class="form-group">
+          <label class="form-label" for="scan-product-id">Product ID</label>
+          <input class="form-input" id="scan-product-id" name="product_id" placeholder="Leave blank to auto-assign next ID" autocomplete="off">
+          <div class="form-hint">Optional — matches the numbering used in <code>vectors/</code> (e.g. 015).</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="scan-file-input">Reference photos</label>
+          <input class="form-input" id="scan-file-input" type="file" accept="image/*" multiple required>
+          <div class="form-hint">Upload a few photos of the product from different angles — each gets run through the same ResNet50 + 12-rotation extraction used to build the rest of the catalog.</div>
+          <div id="scan-preview" class="modal-preview-grid"></div>
+        </div>
+
+        <div id="scan-modal-status" class="modal-status"></div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="scan-modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="scan-submit-btn">Build Vectors</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    async function loadProducts() {
+      let data;
+      try {
+        const res = await fetch('/api/products');
+        data = await res.json();
+      } catch (err) {
+        document.getElementById('catalog-meta').textContent = 'Failed to load catalog';
+        console.error(err);
+        return;
+      }
+
+      document.getElementById('catalog-meta').textContent =
+        `${data.count} product${data.count === 1 ? '' : 's'} in catalog`;
+
+      const grid = document.getElementById('product-grid');
+      const emptyState = document.getElementById('empty-state');
+
+      if (!data.products || data.products.length === 0) {
+        emptyState.style.display = 'block';
+        return;
+      }
+
+      grid.innerHTML = data.products.map(p => `
+        <div class="product-card">
+          ${p.image_url
+            ? `<img class="product-thumb" src="${p.image_url}" alt="Product ${p.id}">`
+            : `<div class="product-thumb-placeholder">No image</div>`
+          }
+          <div class="product-body">
+            <div class="product-id">Product #${p.id}</div>
+            <div class="product-stats">
+              <span>Reference samples: <b>${p.reference_samples}</b></span>
+              <span>Embedding dim: <b>${p.embedding_dim}</b></span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    loadProducts();
+
+    // --- Add New Scan modal ---
+    const backdrop = document.getElementById('scan-modal-backdrop');
+    const openBtn = document.getElementById('add-scan-btn');
+    const closeBtn = document.getElementById('scan-modal-close');
+    const cancelBtn = document.getElementById('scan-modal-cancel');
+    const form = document.getElementById('scan-form');
+    const fileInput = document.getElementById('scan-file-input');
+    const preview = document.getElementById('scan-preview');
+    const statusEl = document.getElementById('scan-modal-status');
+    const submitBtn = document.getElementById('scan-submit-btn');
+
+    function openModal() {
+      backdrop.classList.add('open');
+    }
+
+    function closeModal() {
+      backdrop.classList.remove('open');
+      form.reset();
+      preview.innerHTML = '';
+      statusEl.textContent = '';
+      statusEl.className = 'modal-status';
+    }
+
+    openBtn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+    cancelBtn.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeModal(); });
+
+    fileInput.addEventListener('change', () => {
+      preview.innerHTML = '';
+      Array.from(fileInput.files).forEach(file => {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        preview.appendChild(img);
+      });
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      if (fileInput.files.length === 0) {
+        statusEl.textContent = 'Select at least one photo.';
+        statusEl.className = 'modal-status error';
+        return;
+      }
+
+      const formData = new FormData();
+      const productId = document.getElementById('scan-product-id').value.trim();
+      if (productId) formData.append('product_id', productId);
+      Array.from(fileInput.files).forEach(file => formData.append('images', file));
+
+      submitBtn.disabled = true;
+      statusEl.textContent = `Extracting features from ${fileInput.files.length} photo(s)...`;
+      statusEl.className = 'modal-status info';
+
+      try {
+        const res = await fetch('/api/products/new', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          statusEl.textContent = data.error || 'Failed to add product.';
+          statusEl.className = 'modal-status error';
+          submitBtn.disabled = false;
+          return;
+        }
+
+        statusEl.textContent = `Added product #${data.product_id} (${data.reference_samples} reference samples).`;
+        statusEl.className = 'modal-status success';
+        submitBtn.disabled = false;
+
+        await loadProducts();
+        setTimeout(closeModal, 1200);
+      } catch (err) {
+        statusEl.textContent = 'Network error — see console.';
+        statusEl.className = 'modal-status error';
+        submitBtn.disabled = false;
+        console.error(err);
+      }
+    });
+  </script>
+
+</body>
+</html>

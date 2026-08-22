@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Cart - ScanDesk OS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-main: #f8fafc;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --border-focus: #cbd5e1;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-subtle: #94a3b8;
+
+      --primary: #2563eb;
+      --primary-light: #eff6ff;
+      --success: #16a34a;
+      --success-bg: #f0fdf4;
+      --warning: #d97706;
+      --warning-bg: #fffbeb;
+      --danger: #dc2626;
+      --danger-bg: #fef2f2;
+
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+
+      --radius-sm: 6px;
+      --radius-md: 10px;
+
+      --font-sans: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-main);
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; }
+
+    .brand-icon {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      background: var(--primary);
+      color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 14px;
+    }
+
+    .brand-title { font-weight: 700; font-size: 15px; }
+    .brand-subtitle { font-size: 12px; color: var(--text-muted); }
+
+    .header-actions { display: flex; align-items: center; }
+
+    .system-badge {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600;
+      font-family: var(--font-mono);
+      padding: 6px 12px;
+      background: var(--success-bg);
+      color: var(--success);
+      border-radius: 20px;
+    }
+
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+
+    .page-container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 18px;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 20px;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .card-title { font-size: 14px; font-weight: 600; }
+
+    .camera-viewport {
+      position: relative;
+      width: 100%;
+      height: 440px;
+      background: #0f172a;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #camera-image {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #0f172a;
+      display: none;
+    }
+
+    #box-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .bounding-box {
+      position: absolute;
+      border: 2px solid #22c55e;
+      border-radius: 4px;
+      background: rgba(34, 197, 94, 0.12);
+      box-shadow: 0 0 12px rgba(0,0,0,0.3);
+    }
+
+/* تأثير الوميض والنبض للبوكس الأحمر */
+    @keyframes pulse-danger {
+      0% {
+        border-color: var(--danger);
+        background: rgba(220, 38, 38, 0.1);
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+      }
+      70% {
+        border-color: #ef4444;
+        background: rgba(220, 38, 38, 0.3);
+        box-shadow: 0 0 16px 6px rgba(220, 38, 38, 0.2);
+      }
+      100% {
+        border-color: var(--danger);
+        background: rgba(220, 38, 38, 0.1);
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+      }
+    }
+
+    .bounding-box.unknown-box {
+      border-color: var(--danger);
+      background: rgba(220, 38, 38, 0.15);
+      animation: pulse-danger 1.5s infinite; /* تشغيل حركة الوميض باستمرار */
+    }
+
+    .bounding-box.unknown-box .bbox-label {
+      border-color: var(--danger);
+      background: #7f1d1d; /* خلفية أداكن للتنبيه */
+    }
+
+    .bbox-label {
+      position: absolute;
+      top: -22px;
+      left: -2px;
+      background: #0f172a;
+      color: white;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid #22c55e;
+      white-space: nowrap;
+    }
+
+    .camera-placeholder {
+      color: var(--text-subtle);
+      text-align: center;
+    }
+
+    .camera-hud {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+
+    .hud-chip {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: white;
+      padding: 4px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-family: var(--font-mono);
+    }
+
+    .camera-controls {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .btn {
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-main);
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover { background: var(--bg-main); border-color: var(--border-focus); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+    .btn-primary:hover { background: #1d4ed8; }
+
+    .btn-danger { color: var(--danger); border-color: var(--danger-bg); }
+    .btn-danger:hover { background: var(--danger-bg); }
+
+    .cart-summary {
+      display: flex;
+      gap: 24px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .cart-summary b { color: var(--text-main); font-size: 14px; }
+
+    .cart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 14px;
+    }
+
+    .cart-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+    }
+
+    .cart-thumb {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-sm);
+      object-fit: cover;
+      background: var(--bg-main);
+      flex-shrink: 0;
+    }
+
+    .cart-thumb-placeholder {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: var(--text-subtle);
+      flex-shrink: 0;
+    }
+
+    .cart-item-body { min-width: 0; }
+
+    .cart-item-name {
+      font-size: 13px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
+
+    .cart-item-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .cart-item-qty {
+      margin-left: auto;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--primary);
+      background: var(--primary-light);
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .empty-cart {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="brand">
+      <div class="brand-icon">AI</div>
+      <div>
+        <div class="brand-title">ScanDesk OS</div>
+        <div class="brand-subtitle">Automated Checkout Monitoring</div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <nav style="display: flex; gap: 4px; margin-right: 12px;">
+        <a href="/" style="font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--text-muted);">Dashboard</a>
+        <a href="/livecart" style="font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--primary); background: var(--primary-light);">Live Cart</a>
+        <a href="/products" style="font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--text-muted);">All Products</a>
+      </nav>
+      <div class="system-badge">
+        <span class="status-dot"></span>
+        DESK #04 : ONLINE
+      </div>
+    </div>
+  </header>
+
+  <div class="page-container">
+
+    <section class="card">
+      <div class="card-header">
+        <div class="card-title">📷 Desk Camera Feed</div>
+        <div id="scan-status" style="font-size: 12px; color: var(--text-muted); font-family: var(--font-mono);">No photo loaded</div>
+      </div>
+
+      <div class="camera-viewport">
+        <img id="camera-image" alt="Uploaded desk photo">
+        <div id="box-overlay"></div>
+
+        <div id="camera-placeholder" class="camera-placeholder">
+          <div style="margin-bottom: 10px; color: var(--text-subtle); font-size: 13px;">Live camera feed isn't wired up yet — upload a desk photo to test the pipeline</div>
+          <button id="upload-photo-btn" class="btn btn-primary">Upload Photo</button>
+          <input type="file" id="photo-input" accept="image/*" style="display:none">
+        </div>
+
+        <div class="camera-hud">
+          <div class="hud-chip" id="hud-camera-name">Uploaded Photo Mode</div>
+          <div class="hud-chip" id="hud-inference-status">AI INFERENCE IDLE</div>
+        </div>
+      </div>
+
+      <div class="camera-controls">
+        <button id="change-photo-btn" class="btn" disabled>Change Photo</button>
+        <button id="scan-now-btn" class="btn btn-primary" disabled>Scan</button>
+        <button id="clear-cart-btn" class="btn btn-danger">Clear Cart</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <div class="card-title">Cart — Items Detected</div>
+        <div class="cart-summary">
+          <span>Unique items: <b id="cart-unique-count">0</b></span>
+          <span>Total units: <b id="cart-total-count">0</b></span>
+        </div>
+      </div>
+
+      <div id="cart-grid" class="cart-grid"></div>
+      <div id="cart-empty" class="empty-cart">Cart is empty — upload a photo and press Scan to detect items.</div>
+    </section>
+
+  </div>
+
+<script>
+    let cameraImage, overlay, placeholder, uploadPhotoBtn, changePhotoBtn, photoInput, scanNowBtn, clearCartBtn, scanStatus, hudInference, hudCameraName;
+    let currentPhotoFile = null;
+    let productCatalog = {}; 
+    let cart = {};           
+
+    document.addEventListener('DOMContentLoaded', () => {
+      cameraImage = document.getElementById('camera-image');
+      overlay = document.getElementById('box-overlay');
+      placeholder = document.getElementById('camera-placeholder');
+      uploadPhotoBtn = document.getElementById('upload-photo-btn');
+      changePhotoBtn = document.getElementById('change-photo-btn');
+      photoInput = document.getElementById('photo-input');
+      scanNowBtn = document.getElementById('scan-now-btn');
+      clearCartBtn = document.getElementById('clear-cart-btn');
+      scanStatus = document.getElementById('scan-status');
+      hudInference = document.getElementById('hud-inference-status');
+      hudCameraName = document.getElementById('hud-camera-name');
+
+      if (uploadPhotoBtn) uploadPhotoBtn.addEventListener('click', openFilePicker);
+      if (changePhotoBtn) changePhotoBtn.addEventListener('click', openFilePicker);
+      if (photoInput) photoInput.addEventListener('change', onPhotoSelected);
+      if (scanNowBtn) scanNowBtn.addEventListener('click', scanPhoto);
+      if (clearCartBtn) clearCartBtn.addEventListener('click', () => {
+        cart = {};
+        renderCart();
+      });
+
+      loadCatalog();
+    });
+
+    async function loadCatalog() {
+      try {
+        const res = await fetch('/api/products');
+        const data = await res.json();
+        (data.products || []).forEach(p => { productCatalog[p.id] = p; });
+      } catch (err) {
+        console.error('Failed to load product catalog', err);
+      }
+    }
+
+    function openFilePicker() {
+      if (photoInput) {
+        photoInput.click();
+      }
+    }
+
+    function onPhotoSelected(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      currentPhotoFile = file;
+      overlay.innerHTML = '';
+
+      const url = URL.createObjectURL(file);
+      cameraImage.src = url;
+      cameraImage.style.display = 'block';
+      placeholder.style.display = 'none';
+
+      hudCameraName.textContent = file.name;
+      scanNowBtn.disabled = false;
+      changePhotoBtn.disabled = false;
+      scanStatus.textContent = 'Photo loaded — ready to scan';
+    }
+
+    async function scanPhoto() {
+      if (!currentPhotoFile) return;
+
+      const formData = new FormData();
+      formData.append('image', currentPhotoFile, currentPhotoFile.name);
+
+      scanStatus.textContent = 'Scanning...';
+      hudInference.textContent = 'AI INFERENCE RUNNING';
+      scanNowBtn.disabled = true;
+
+      try {
+        const res = await fetch('/predict', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (data.error) {
+          scanStatus.textContent = 'Error: ' + data.error;
+          hudInference.textContent = 'AI INFERENCE IDLE';
+          scanNowBtn.disabled = false;
+          return;
+        }
+
+        renderBoxes(data.products || []);
+        addToCart(data.products || []);
+
+        scanStatus.textContent = `Detected ${data.count} item${data.count === 1 ? '' : 's'} (${data.inference_ms}ms)`;
+        hudInference.textContent = 'AI INFERENCE IDLE';
+      } catch (err) {
+        scanStatus.textContent = 'Scan failed';
+        hudInference.textContent = 'AI INFERENCE IDLE';
+        console.error(err);
+      } finally {
+        scanNowBtn.disabled = false;
+      }
+    }
+
+    function renderBoxes(products) {
+      overlay.innerHTML = '';
+      if (!cameraImage.naturalWidth) return;
+
+      const rect = cameraImage.getBoundingClientRect();
+      const scale = Math.min(rect.width / cameraImage.naturalWidth, rect.height / cameraImage.naturalHeight);
+      const renderedW = cameraImage.naturalWidth * scale;
+      const renderedH = cameraImage.naturalHeight * scale;
+      const offsetX = (rect.width - renderedW) / 2;
+      const offsetY = (rect.height - renderedH) / 2;
+
+      let hasUnknownItem = false;
+
+      products.forEach(p => {
+        const [x1, y1, x2, y2] = p.bbox;
+        const box = document.createElement('div');
+        
+        const isUnknown = (p.product === 'unknown' || p.confidence < 0.55);
+        if (isUnknown) hasUnknownItem = true;
+
+        box.className = isUnknown ? 'bounding-box unknown-box' : 'bounding-box';
+        box.style.left = (offsetX + x1 * scale) + 'px';
+        box.style.top = (offsetY + y1 * scale) + 'px';
+        box.style.width = ((x2 - x1) * scale) + 'px';
+        box.style.height = ((y2 - y1) * scale) + 'px';
+
+        const label = document.createElement('div');
+        label.className = 'bbox-label';
+        const confPct = (p.confidence * 100).toFixed(1);
+        
+        label.textContent = isUnknown ? `Unknown Item • ${confPct}%` : `#${p.product} • ${confPct}%`;
+        
+        box.appendChild(label);
+        overlay.appendChild(box);
+      });
+
+      // الأصوات البرمجية المضمونة 100%
+      if (hasUnknownItem) {
+        // صوت إنذار للمنتجات غير المعروفة
+        try {
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2);
+          
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+          
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.5);
+        } catch (e) {
+          console.log("AudioContext error:", e);
+        }
+      } else if (products.length > 0) {
+        // صوت نجاح إذا كانت جميع المنتجات معروفة
+        try {
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.1);
+          
+          gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+          
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.3);
+        } catch (e) {
+          console.log("Success Audio error:", e);
+        }
+      }
+    }
+
+    function addToCart(products) {
+      products.forEach(p => {
+        if (p.product === 'unknown') return;
+        if (!cart[p.product]) {
+          cart[p.product] = { count: 0, bestConfidence: 0 };
+        }
+        cart[p.product].count += 1;
+        cart[p.product].bestConfidence = Math.max(cart[p.product].bestConfidence, p.confidence);
+      });
+      renderCart();
+    }
+
+    function renderCart() {
+      const grid = document.getElementById('cart-grid');
+      const emptyState = document.getElementById('cart-empty');
+      const ids = Object.keys(cart);
+
+      let totalUnits = 0;
+      ids.forEach(id => totalUnits += cart[id].count);
+
+      document.getElementById('cart-unique-count').textContent = ids.length;
+      document.getElementById('cart-total-count').textContent = totalUnits;
+
+      if (ids.length === 0) {
+        grid.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+      }
+      emptyState.style.display = 'none';
+
+      grid.innerHTML = ids.map(id => {
+        const item = cart[id];
+        const catalogEntry = productCatalog[id];
+        const imageUrl = catalogEntry && catalogEntry.image_url;
+        const confPct = (item.bestConfidence * 100).toFixed(1);
+
+        return `
+          <div class="cart-item">
+            ${imageUrl
+              ? `<img class="cart-thumb" src="${imageUrl}" alt="Product ${id}">`
+              : `<div class="cart-thumb-placeholder">#${id}</div>`
+            }
+            <div class="cart-item-body">
+              <div class="cart-item-name">Product #${id}</div>
+              <div class="cart-item-meta">Best match: ${confPct}%</div>
+            </div>
+            <div class="cart-item-qty">×${item.count}</div>
+          </div>
+        `;
+      }).join('');
+    }
+  </script>
+
+</body>
+</html>

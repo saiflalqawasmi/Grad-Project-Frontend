@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Checkout Dashboard - Desk #04</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-main: #f8fafc;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --border-focus: #cbd5e1;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-subtle: #94a3b8;
+      
+      --primary: #2563eb;
+      --primary-light: #eff6ff;
+      --success: #16a34a;
+      --success-bg: #f0fdf4;
+      --warning: #d97706;
+      --warning-bg: #fffbeb;
+      --danger: #dc2626;
+      --danger-bg: #fef2f2;
+
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+      
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      
+      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Top Navigation */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      background: var(--primary);
+      border-radius: var(--radius-sm);
+      display: grid;
+      place-items: center;
+      color: white;
+      font-weight: 700;
+    }
+
+    .brand-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .brand-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .system-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--success-bg);
+      border: 1px solid rgba(22, 163, 74, 0.2);
+      border-radius: 999px;
+      color: var(--success);
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--success);
+      border-radius: 50%;
+      box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.2);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4); }
+      70% { box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+    }
+
+    /* Main Layout */
+    .dashboard-container {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      gap: 24px;
+    }
+
+    @media (max-width: 1200px) {
+      .dashboard-container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .main-content {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .sidebar-content {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Card Components */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* KPI Metrics Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 768px) {
+      .kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .kpi-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    .kpi-value {
+      font-size: 24px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+
+    .kpi-trend {
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .trend-up { color: var(--success); }
+    .trend-neutral { color: var(--text-muted); }
+
+    /* Camera Feed Card */
+    .camera-card {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .camera-viewport {
+      position: relative;
+      width: 100%;
+      height: 440px;
+      background: #0f172a;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Simulated Video Surface */
+    .camera-stream {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .desk-surface {
+      width: 80%;
+      height: 75%;
+      border: 2px dashed rgba(255, 255, 255, 0.15);
+      border-radius: var(--radius-md);
+      position: relative;
+    }
+
+    /* Bounding Boxes */
+    .bounding-box {
+      position: absolute;
+      border: 2px solid;
+      border-radius: 4px;
+      padding: 4px;
+      box-shadow: 0 0 12px rgba(0,0,0,0.3);
+      backdrop-filter: blur(2px);
+    }
+
+    .box-apple {
+      top: 20%;
+      left: 15%;
+      width: 140px;
+      height: 130px;
+      border-color: #22c55e;
+      background: rgba(34, 197, 94, 0.1);
+    }
+
+    .box-milk {
+      top: 30%;
+      right: 20%;
+      width: 160px;
+      height: 200px;
+      border-color: #3b82f6;
+      background: rgba(59, 130, 246, 0.1);
+    }
+
+    .box-bread {
+      bottom: 10%;
+      left: 40%;
+      width: 180px;
+      height: 120px;
+      border-color: #f59e0b;
+      background: rgba(245, 158, 11, 0.1);
+    }
+
+    .bbox-label {
+      position: absolute;
+      top: -24px;
+      left: -2px;
+      background: #0f172a;
+      color: white;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .bbox-apple .bbox-label { border: 1px solid #22c55e; }
+    .bbox-milk .bbox-label { border: 1px solid #3b82f6; }
+    .bbox-bread .bbox-label { border: 1px solid #f59e0b; }
+
+    .camera-hud {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+
+    .hud-chip {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: white;
+      padding: 4px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-family: var(--font-mono);
+    }
+
+    .camera-controls {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .btn {
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-main);
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      background: var(--bg-main);
+      border-color: var(--border-focus);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+
+    /* Last Scan Breakdown */
+    .scan-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .scan-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+    }
+
+    .item-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .item-thumb {
+      width: 40px;
+      height: 40px;
+      background: var(--bg-main);
+      border-radius: var(--radius-sm);
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+    }
+
+    .item-name {
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .item-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .item-score {
+      text-align: right;
+    }
+
+    .score-value {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .score-high { color: var(--success); }
+    .score-med { color: var(--warning); }
+
+    /* Model Performance Metrics */
+    .gauge-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0;
+    }
+
+    .accuracy-progress-bar {
+      width: 100%;
+      height: 8px;
+      background: var(--bg-main);
+      border-radius: 999px;
+      overflow: hidden;
+      margin: 12px 0 6px 0;
+    }
+
+    .accuracy-progress-fill {
+      height: 100%;
+      background: var(--success);
+      width: 98.4%;
+      border-radius: 999px;
+    }
+
+    /* Products Table */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+    }
+
+    .data-table th {
+      padding: 8px 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .data-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .data-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
+
+    .badge-success { background: var(--success-bg); color: var(--success); }
+    .badge-warning { background: var(--warning-bg); color: var(--warning); }
+    .badge-danger { background: var(--danger-bg); color: var(--danger); }
+
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-icon">AI</div>
+      <div>
+        <div class="brand-title">ScanDesk OS</div>
+        <div class="brand-subtitle">Automated Checkout Monitoring</div>
+      </div>
+    </div>
+    
+    <div class="header-actions">
+      <nav style="display: flex; gap: 4px; margin-right: 12px;">
+        <a href="/" style="font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--primary); background: var(--primary-light);">Dashboard</a>
+        <a href="/livecart" style="font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--text-muted);">Live Cart</a>
+        <a href="/products" style="font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--text-muted);">All Products</a>
+      </nav>
+      <div class="system-badge">
+        <span class="status-dot"></span>
+        DESK #04 : ONLINE
+      </div>
+    </div>
+  </header>
+
+  <!-- Dashboard Container -->
+  <div class="dashboard-container">
+    
+    <!-- Left Main Column -->
+    <main class="main-content">
+      
+      <!-- Top KPI Bar -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Overall Model Accuracy</div>
+          <div class="kpi-value" id="kpi-overall-accuracy">--%</div>
+          <div class="kpi-trend trend-neutral" id="kpi-overall-accuracy-trend">Awaiting scans</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Last Scan Confidence</div>
+          <div class="kpi-value" id="kpi-last-confidence">--%</div>
+          <div class="kpi-trend trend-neutral" id="kpi-last-confidence-trend">No scans yet</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Inference Speed</div>
+          <div class="kpi-value" id="kpi-inference-speed">--ms</div>
+          <div class="kpi-trend trend-neutral">Real-time Latency</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Scans Today</div>
+          <div class="kpi-value" id="kpi-scans-today">0</div>
+          <div class="kpi-trend trend-neutral" id="kpi-scans-trend">Since page load</div>
+        </div>
+      </div>
+
+      <!-- Live Camera Viewport Box -->
+      <section class="card camera-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>📷 Live Camera Desk Stream</span>
+          </div>
+          <!-- <div style="font-size: 12px; color: var(--text-muted);">
+            Resolution: 1920x1080 | FPS: 60
+          </div> -->
+        </div>
+
+        <div class="camera-viewport">
+          <div class="camera-stream">
+            <div class="desk-surface">
+              
+              {% if camera_connected %}
+              <!-- Bounding Box 1: Apple -->
+              <!-- <div class="bounding-box box-apple bbox-apple">
+                <div class="bbox-label">Organic Gala Apple • 98.7%</div>
+              </div> -->
+
+              <!-- Bounding Box 2: Milk -->
+              <!-- <div class="bounding-box box-milk bbox-milk">
+                <div class="bbox-label">Whole Milk 1L • 99.4%</div>
+              </div> -->
+
+              <!-- Bounding Box 3: Bread -->
+              <!-- <div class="bounding-box box-bread bbox-bread">
+                <div class="bbox-label">Sourdough Bread • 84.1%</div>
+              </div> -->
+              {% else %}
+
+              <div style="display: flex; justify-content: center; align-items: center; height: 100%;">
+                <button class="btn btn-primary">Please Connect Camera</button>
+              </div>
+
+              {% endif %}
+
+            </div>
+          </div>
+
+          <div class="camera-hud">
+            <div class="hud-chip">{{ camera_name if camera_name else "Camera" }}</div>
+            <div class="hud-chip">AI INFERENCE ACTIVE</div>
+          </div>
+        </div>
+
+        <!-- <div class="camera-controls">
+          <button class="btn btn-primary">Toggle Overlays</button>
+          <button class="btn">Switch Camera View</button>
+          <button class="btn">Calibrate Desk Matrix</button>
+        </div> -->
+      </section>
+
+      <!-- Last Scan Item Breakdown -->
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title">Last Scan Results (Transaction #8839)</div>
+          <button class="btn" style="font-size: 11px; padding: 4px 8px;">View Full History</button>
+        </div>
+
+        <div class="scan-list">
+          <div class="scan-item">
+            <div class="item-info">
+              <div class="item-thumb">🥛</div>
+              <div>
+                <div class="item-name">Whole Milk 1L</div>
+                <div class="item-meta">SKU: 4011-8832 | Packaged</div>
+              </div>
+            </div>
+            <div class="item-score">
+              <div class="score-value score-high">99.4%</div>
+              <div class="item-meta">Class: High Confidence</div>
+            </div>
+          </div>
+
+          <div class="scan-item">
+            <div class="item-info">
+              <div class="item-thumb">🍎</div>
+              <div>
+                <div class="item-name">Organic Gala Apple</div>
+                <div class="item-meta">SKU: 3110-9921 | Produce (Weight: 180g)</div>
+              </div>
+            </div>
+            <div class="item-score">
+              <div class="score-value score-high">98.7%</div>
+              <div class="item-meta">Class: High Confidence</div>
+            </div>
+          </div>
+
+          <div class="scan-item">
+            <div class="item-info">
+              <div class="item-thumb">🍞</div>
+              <div>
+                <div class="item-name">Sourdough Artisan Bread</div>
+                <div class="item-meta">SKU: 1002-4412 | Bakery (Unpackaged)</div>
+              </div>
+            </div>
+            <div class="item-score">
+              <div class="score-value score-med">84.1%</div>
+              <div class="item-meta">Class: Attention Required</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Right Sidebar Statistics Column -->
+    <aside class="sidebar-content">
+
+      <!-- Model Performance Diagnostics -->
+      <section class="card">
+        <div class="card-title">Model Diagnostics</div>
+        <div class="gauge-container">
+          <div style="font-size: 32px; font-weight: 700; font-family: var(--font-mono);" id="gauge-accuracy-value">--%</div>
+          <div style="font-size: 12px; color: var(--text-muted);">Current Accuracy Baseline</div>
+          
+          <div class="accuracy-progress-bar">
+            <div class="accuracy-progress-fill" id="accuracy-progress-fill" style="width: 0%;"></div>
+          </div>
+          
+          <div style="display: flex; justify-content: space-between; width: 100%; font-size: 11px; color: var(--text-subtle);">
+            <span>0%</span>
+            <span>Target: 95%</span>
+            <span>100%</span>
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 8px; font-size: 12px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: var(--text-muted);">High Confidence (>90%):</span>
+            <span style="font-weight: 600;" id="stat-high-confidence">--%</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">Low Confidence (<80%):</span>
+            <span style="font-weight: 600; color: var(--warning);" id="stat-low-confidence">--%</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Top Scanned Products & Accuracy -->
+      <section class="card">
+        <div class="card-title" style="margin-bottom: 12px;">Product Performance</div>
+        
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Scans</th>
+              <th>Accuracy</th>
+            </tr>
+          </thead>
+          <tbody id="product-performance-body">
+            <tr>
+              <td colspan="3" style="text-align: center; color: var(--text-muted);">No scans yet</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- System Logs Panel -->
+      <section class="card">
+        <div class="card-title" style="margin-bottom: 8px;">Real-time Telemetry</div>
+        <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px;">
+          <div>[14:23:01] MODEL_INFER_OK: Desk #04 (3 items, 112ms)</div>
+          <div>[14:22:45] LIGHT_NORM: Ambient light exposure stable</div>
+          <div>[14:21:10] CAMERA_CHECK: Frame rate stable at 60 FPS</div>
+        </div>
+      </section>
+
+    </aside>
+
+  </div>
+
+  <script>
+    // Pulls real numbers from /stats (built from actual /predict calls —
+    // see stats_tracker.py). Nothing here is hardcoded.
+
+    function fmtPct(value) {
+      return (value === null || value === undefined) ? '--%' : value.toFixed(1) + '%';
+    }
+
+    function fmtMs(value) {
+      return (value === null || value === undefined) ? '--ms' : Math.round(value) + 'ms';
+    }
+
+    function badgeClass(accuracy) {
+      if (accuracy === null || accuracy === undefined) return 'badge-warning';
+      if (accuracy >= 90) return 'badge-success';
+      if (accuracy >= 80) return 'badge-warning';
+      return 'badge-danger';
+    }
+
+    function renderProductTable(products) {
+      const body = document.getElementById('product-performance-body');
+      if (!products || products.length === 0) {
+        body.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">No scans yet</td></tr>';
+        return;
+      }
+      body.innerHTML = products.map(p => `
+        <tr>
+          <td>${p.name}</td>
+          <td>${p.scans}</td>
+          <td><span class="badge ${badgeClass(p.accuracy)}">${fmtPct(p.accuracy)}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    async function refreshStats() {
+      let data;
+      try {
+        const res = await fetch('/stats');
+        data = await res.json();
+      } catch (err) {
+        console.error('Failed to load /stats', err);
+        return;
+      }
+
+      document.getElementById('kpi-overall-accuracy').textContent = fmtPct(data.overall_accuracy);
+      document.getElementById('kpi-overall-accuracy-trend').textContent =
+        data.has_data ? `Based on ${data.scans_today} scan${data.scans_today === 1 ? '' : 's'}` : 'Awaiting scans';
+
+      document.getElementById('kpi-last-confidence').textContent = fmtPct(data.last_scan_confidence);
+      document.getElementById('kpi-last-confidence-trend').textContent =
+        data.last_scan_confidence !== null ? 'Most recent scan' : 'No scans yet';
+
+      document.getElementById('kpi-inference-speed').textContent = fmtMs(data.inference_speed_ms);
+      document.getElementById('kpi-scans-today').textContent = data.scans_today.toLocaleString();
+
+      document.getElementById('gauge-accuracy-value').textContent = fmtPct(data.overall_accuracy);
+      document.getElementById('accuracy-progress-fill').style.width =
+        (data.overall_accuracy || 0) + '%';
+
+      document.getElementById('stat-high-confidence').textContent = fmtPct(data.high_confidence_pct);
+      document.getElementById('stat-low-confidence').textContent = fmtPct(data.low_confidence_pct);
+
+      renderProductTable(data.products);
+    }
+
+    refreshStats();
+    setInterval(refreshStats, 5000); // keep KPIs live as new scans come in
+  </script>
+
+</body>
+</html>
