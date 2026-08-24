@@ -4,11 +4,14 @@ import uuid
 from pathlib import Path
 
 import numpy as np
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, Response
 from PIL import Image
 
 from inference import get_pipeline, FeatureExtractor, VECTORS_DIR, ROTATION_ANGLES
 from stats_tracker import stats, Timer
+from camera_feed import (
+    connect_camera, disconnect_camera, generate_frames, get_frame_jpeg, is_connected,
+)
 
 app = Flask(__name__)
 
@@ -33,7 +36,7 @@ def get_extractor():
 
 @app.route("/")
 def dashboard():
-    return render_template('dashboard.html')
+    return render_template('dashboard.html', camera_connected=is_connected())
 
 
 @app.route("/products")
@@ -43,7 +46,40 @@ def products_page():
 
 @app.route("/livecart")
 def livecart_page():
-    return render_template('livecart.html')
+    return render_template('livecart.html', camera_connected=is_connected())
+
+
+@app.route("/connect_camera", methods=["POST"])
+def connect_camera_route():
+    """
+    Connects to a phone acting as an IP camera (e.g. the 'IP Webcam' Android
+    app's MJPEG stream, usually http://<phone-ip>:8080/video). Called via
+    fetch() from livecart.html so the page doesn't need a full reload.
+    """
+    url = request.form.get("camera_url")
+    if not url and request.is_json:
+        url = (request.get_json(silent=True) or {}).get("camera_url")
+    if not url:
+        return jsonify({"error": "camera_url is required"}), 400
+
+    connected = connect_camera(url)
+    return jsonify({"connected": connected, "camera_url": url if connected else None})
+
+
+@app.route("/disconnect_camera", methods=["POST"])
+def disconnect_camera_route():
+    disconnect_camera()
+    return jsonify({"connected": False})
+
+
+@app.route("/video_feed")
+def video_feed():
+    if not is_connected():
+        return jsonify({"error": "no camera connected"}), 400
+    return Response(
+        generate_frames(),
+        mimetype="multipart/x-mixed-replace; boundary=frame"
+    )
 
 
 @app.route("/api/products")
@@ -153,6 +189,25 @@ def add_product():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/capture_frame")
+def capture_frame():
+    """
+    Grabs a single current frame from the connected phone camera as a JPEG.
+    Used by the 'Scan Now' button in live-camera mode: the frontend fetches
+    this once, then re-posts the bytes to /predict — so /predict only ever
+    has to deal with 'here is one image', whether it came from an upload
+    or from the live phone stream.
+    """
+    if not is_connected():
+        return jsonify({"error": "no camera connected"}), 400
+
+    jpeg_bytes = get_frame_jpeg()
+    if jpeg_bytes is None:
+        return jsonify({"error": "failed to read frame from camera"}), 500
+
+    return Response(jpeg_bytes, mimetype="image/jpeg")
 
 
 @app.route("/predict", methods=["POST"])

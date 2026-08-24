@@ -140,9 +140,9 @@
       border-radius: 4px;
       background: rgba(34, 197, 94, 0.12);
       box-shadow: 0 0 12px rgba(0,0,0,0.3);
+      transition: all 0.1s linear;
     }
 
-/* تأثير الوميض والنبض للبوكس الأحمر */
     @keyframes pulse-danger {
       0% {
         border-color: var(--danger);
@@ -164,12 +164,12 @@
     .bounding-box.unknown-box {
       border-color: var(--danger);
       background: rgba(220, 38, 38, 0.15);
-      animation: pulse-danger 1.5s infinite; /* تشغيل حركة الوميض باستمرار */
+      animation: pulse-danger 1.5s infinite;
     }
 
     .bounding-box.unknown-box .bbox-label {
       border-color: var(--danger);
-      background: #7f1d1d; /* خلفية أداكن للتنبيه */
+      background: #7f1d1d;
     }
 
     .bbox-label {
@@ -355,25 +355,37 @@
         <div id="scan-status" style="font-size: 12px; color: var(--text-muted); font-family: var(--font-mono);">No photo loaded</div>
       </div>
 
-      <div class="camera-viewport">
+      <div class="camera-viewport" id="viewport">
         <img id="camera-image" alt="Uploaded desk photo">
+        <img id="live-stream-image" alt="Live phone camera stream" style="display:none; width:100%; height:100%; object-fit:cover;"
+             {% if camera_connected %}src="{{ url_for('video_feed') }}"{% endif %}>
         <div id="box-overlay"></div>
 
-        <div id="camera-placeholder" class="camera-placeholder">
-          <div style="margin-bottom: 10px; color: var(--text-subtle); font-size: 13px;">Live camera feed isn't wired up yet — upload a desk photo to test the pipeline</div>
-          <button id="upload-photo-btn" class="btn btn-primary">Upload Photo</button>
-          <input type="file" id="photo-input" accept="image/*" style="display:none">
+        <div id="camera-placeholder" class="camera-placeholder" {% if camera_connected %}style="display:none;"{% endif %}>
+          <div style="margin-bottom: 10px; color: var(--text-subtle); font-size: 13px;">Upload a desk photo, or connect your phone as a live camera</div>
+          <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
+            <button id="upload-photo-btn" class="btn btn-primary">Upload Photo</button>
+            <input type="file" id="photo-input" accept="image/*" style="display:none">
+          </div>
+          <form id="connect-camera-form" style="display:flex; gap:8px; margin-top:10px; align-items:center; justify-content:center;">
+            <input type="text" id="camera-url-input" name="camera_url"
+                   placeholder="http://192.168.x.x:8080/video"
+                   style="padding: 8px 10px; width: 260px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 12px;" required>
+            <button type="submit" class="btn">Connect Phone Camera</button>
+          </form>
+          <div id="camera-connect-status" style="margin-top: 6px; font-size: 11px; color: var(--text-subtle);"></div>
         </div>
 
         <div class="camera-hud">
-          <div class="hud-chip" id="hud-camera-name">Uploaded Photo Mode</div>
+          <div class="hud-chip" id="hud-camera-name">{{ "Phone Camera (Live)" if camera_connected else "Uploaded Photo Mode" }}</div>
           <div class="hud-chip" id="hud-inference-status">AI INFERENCE IDLE</div>
         </div>
       </div>
 
       <div class="camera-controls">
-        <button id="change-photo-btn" class="btn" disabled>Change Photo</button>
-        <button id="scan-now-btn" class="btn btn-primary" disabled>Scan</button>
+        <button id="change-photo-btn" class="btn" {% if camera_connected %}style="display:none;"{% endif %} disabled>Change Photo</button>
+        <button id="disconnect-camera-btn" class="btn" {% if not camera_connected %}style="display:none;"{% endif %}>Disconnect Camera</button>
+        <button id="scan-now-btn" class="btn btn-primary" {% if not camera_connected %}disabled{% endif %}>Scan</button>
         <button id="clear-cart-btn" class="btn btn-danger">Clear Cart</button>
       </div>
     </section>
@@ -393,36 +405,179 @@
 
   </div>
 
-<script>
-    let cameraImage, overlay, placeholder, uploadPhotoBtn, changePhotoBtn, photoInput, scanNowBtn, clearCartBtn, scanStatus, hudInference, hudCameraName;
+  <script>
+    let dom = {};
     let currentPhotoFile = null;
+    let currentObjectUrl = null;
+    let liveMode = {{ 'true' if camera_connected else 'false' }};
     let productCatalog = {}; 
     let cart = {};           
+    let lastDetectedProducts = [];
+    let audioCtx = null;
 
     document.addEventListener('DOMContentLoaded', () => {
-      cameraImage = document.getElementById('camera-image');
-      overlay = document.getElementById('box-overlay');
-      placeholder = document.getElementById('camera-placeholder');
-      uploadPhotoBtn = document.getElementById('upload-photo-btn');
-      changePhotoBtn = document.getElementById('change-photo-btn');
-      photoInput = document.getElementById('photo-input');
-      scanNowBtn = document.getElementById('scan-now-btn');
-      clearCartBtn = document.getElementById('clear-cart-btn');
-      scanStatus = document.getElementById('scan-status');
-      hudInference = document.getElementById('hud-inference-status');
-      hudCameraName = document.getElementById('hud-camera-name');
+      // Cache DOM elements
+      dom = {
+        cameraImage: document.getElementById('camera-image'),
+        liveStreamImage: document.getElementById('live-stream-image'),
+        overlay: document.getElementById('box-overlay'),
+        placeholder: document.getElementById('camera-placeholder'),
+        uploadPhotoBtn: document.getElementById('upload-photo-btn'),
+        changePhotoBtn: document.getElementById('change-photo-btn'),
+        photoInput: document.getElementById('photo-input'),
+        scanNowBtn: document.getElementById('scan-now-btn'),
+        clearCartBtn: document.getElementById('clear-cart-btn'),
+        connectCameraForm: document.getElementById('connect-camera-form'),
+        cameraUrlInput: document.getElementById('camera-url-input'),
+        cameraConnectStatus: document.getElementById('camera-connect-status'),
+        disconnectCameraBtn: document.getElementById('disconnect-camera-btn'),
+        scanStatus: document.getElementById('scan-status'),
+        hudInference: document.getElementById('hud-inference-status'),
+        hudCameraName: document.getElementById('hud-camera-name'),
+        viewport: document.getElementById('viewport')
+      };
 
-      if (uploadPhotoBtn) uploadPhotoBtn.addEventListener('click', openFilePicker);
-      if (changePhotoBtn) changePhotoBtn.addEventListener('click', openFilePicker);
-      if (photoInput) photoInput.addEventListener('change', onPhotoSelected);
-      if (scanNowBtn) scanNowBtn.addEventListener('click', scanPhoto);
-      if (clearCartBtn) clearCartBtn.addEventListener('click', () => {
+      if (dom.uploadPhotoBtn) dom.uploadPhotoBtn.addEventListener('click', openFilePicker);
+      if (dom.changePhotoBtn) dom.changePhotoBtn.addEventListener('click', openFilePicker);
+      if (dom.photoInput) dom.photoInput.addEventListener('change', onPhotoSelected);
+      if (dom.connectCameraForm) dom.connectCameraForm.addEventListener('submit', onConnectCamera);
+      if (dom.disconnectCameraBtn) dom.disconnectCameraBtn.addEventListener('click', onDisconnectCamera);
+      if (dom.scanNowBtn) dom.scanNowBtn.addEventListener('click', scanNow);
+      if (dom.clearCartBtn) dom.clearCartBtn.addEventListener('click', () => {
         cart = {};
         renderCart();
       });
 
+      // Enable Web Audio API on initial click
+      document.body.addEventListener('click', initAudio, { once: true });
+
+      // Auto recalculate bounding box positions on window/viewport resize
+      const resizeObserver = new ResizeObserver(() => {
+        if (lastDetectedProducts.length > 0) {
+          renderBoxes(lastDetectedProducts, liveMode ? dom.liveStreamImage : dom.cameraImage, false);
+        }
+      });
+      resizeObserver.observe(dom.viewport);
+
+      if (liveMode) enterLiveMode(false);
+
       loadCatalog();
     });
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playAudioAlert(isUnknown) {
+      if (!audioCtx) initAudio();
+      if (!audioCtx) return;
+
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        const now = audioCtx.currentTime;
+
+        if (isUnknown) {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.2);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.5);
+        } else {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(587.33, now);
+          osc.frequency.setValueAtTime(880, now + 0.1);
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.3);
+        }
+      } catch (e) {
+        console.warn("Audio Context playback error:", e);
+      }
+    }
+
+    async function onConnectCamera(e) {
+      e.preventDefault();
+      const url = dom.cameraUrlInput.value.trim();
+      if (!url) return;
+
+      dom.cameraConnectStatus.textContent = 'Connecting...';
+
+      try {
+        const formData = new FormData();
+        formData.append('camera_url', url);
+        const res = await fetch('/connect_camera', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (!data.connected) {
+          dom.cameraConnectStatus.textContent = 'Could not connect — check the URL and network connection.';
+          return;
+        }
+
+        dom.cameraConnectStatus.textContent = '';
+        enterLiveMode(true);
+      } catch (err) {
+        dom.cameraConnectStatus.textContent = 'Connection failed.';
+        console.error(err);
+      }
+    }
+
+    async function onDisconnectCamera() {
+      try {
+        await fetch('/disconnect_camera', { method: 'POST' });
+      } catch (err) {
+        console.error(err);
+      }
+      exitLiveMode();
+    }
+
+    function enterLiveMode(setSrc) {
+      liveMode = true;
+      currentPhotoFile = null;
+      lastDetectedProducts = [];
+      dom.overlay.innerHTML = '';
+
+      if (setSrc) {
+        dom.liveStreamImage.src = '/video_feed?t=' + Date.now();
+      }
+      dom.liveStreamImage.style.display = 'block';
+      dom.cameraImage.style.display = 'none';
+      dom.placeholder.style.display = 'none';
+
+      dom.changePhotoBtn.style.display = 'none';
+      dom.disconnectCameraBtn.style.display = 'inline-flex';
+      dom.scanNowBtn.disabled = false;
+
+      dom.hudCameraName.textContent = 'Phone Camera (Live)';
+      dom.scanStatus.textContent = 'Live feed connected — press Scan to detect items';
+    }
+
+    function exitLiveMode() {
+      liveMode = false;
+      dom.liveStreamImage.style.display = 'none';
+      dom.liveStreamImage.src = '';
+      dom.cameraImage.style.display = 'none';
+      dom.placeholder.style.display = 'flex';
+
+      dom.changePhotoBtn.style.display = 'inline-flex';
+      dom.disconnectCameraBtn.style.display = 'none';
+      dom.scanNowBtn.disabled = !currentPhotoFile;
+
+      dom.hudCameraName.textContent = 'Uploaded Photo Mode';
+      dom.scanStatus.textContent = 'No photo loaded';
+    }
 
     async function loadCatalog() {
       try {
@@ -435,72 +590,119 @@
     }
 
     function openFilePicker() {
-      if (photoInput) {
-        photoInput.click();
-      }
+      if (dom.photoInput) dom.photoInput.click();
     }
 
     function onPhotoSelected(e) {
       const file = e.target.files[0];
       if (!file) return;
 
+      if (liveMode) exitLiveMode();
+
+      // Revoke old blob to prevent memory leak
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+      }
+
       currentPhotoFile = file;
-      overlay.innerHTML = '';
+      lastDetectedProducts = [];
+      dom.overlay.innerHTML = '';
 
-      const url = URL.createObjectURL(file);
-      cameraImage.src = url;
-      cameraImage.style.display = 'block';
-      placeholder.style.display = 'none';
+      currentObjectUrl = URL.createObjectURL(file);
+      dom.cameraImage.src = currentObjectUrl;
+      dom.cameraImage.style.display = 'block';
+      dom.placeholder.style.display = 'none';
 
-      hudCameraName.textContent = file.name;
-      scanNowBtn.disabled = false;
-      changePhotoBtn.disabled = false;
-      scanStatus.textContent = 'Photo loaded — ready to scan';
+      dom.hudCameraName.textContent = file.name;
+      dom.scanNowBtn.disabled = false;
+      dom.changePhotoBtn.disabled = false;
+      dom.scanStatus.textContent = 'Photo loaded — ready to scan';
     }
 
-    async function scanPhoto() {
+    async function scanNow() {
+      if (liveMode) {
+        await scanLiveFrame();
+      } else {
+        await scanUploadedPhoto();
+      }
+    }
+
+    async function scanLiveFrame() {
+      dom.scanStatus.textContent = 'Capturing frame...';
+      dom.hudInference.textContent = 'AI INFERENCE RUNNING';
+      dom.scanNowBtn.disabled = true;
+
+      try {
+        const frameRes = await fetch('/capture_frame');
+        if (!frameRes.ok) {
+          const errData = await frameRes.json().catch(() => ({}));
+          dom.scanStatus.textContent = 'Error: ' + (errData.error || 'could not capture frame');
+          dom.hudInference.textContent = 'AI INFERENCE IDLE';
+          return;
+        }
+        const blob = await frameRes.blob();
+
+        const formData = new FormData();
+        formData.append('image', blob, 'live_frame.jpg');
+
+        await runPredict(formData);
+      } catch (err) {
+        dom.scanStatus.textContent = 'Scan failed';
+        dom.hudInference.textContent = 'AI INFERENCE IDLE';
+        console.error(err);
+      } finally {
+        dom.scanNowBtn.disabled = false;
+      }
+    }
+
+    async function scanUploadedPhoto() {
       if (!currentPhotoFile) return;
 
       const formData = new FormData();
       formData.append('image', currentPhotoFile, currentPhotoFile.name);
 
-      scanStatus.textContent = 'Scanning...';
-      hudInference.textContent = 'AI INFERENCE RUNNING';
-      scanNowBtn.disabled = true;
+      dom.scanStatus.textContent = 'Scanning...';
+      dom.hudInference.textContent = 'AI INFERENCE RUNNING';
+      dom.scanNowBtn.disabled = true;
 
       try {
-        const res = await fetch('/predict', { method: 'POST', body: formData });
-        const data = await res.json();
-
-        if (data.error) {
-          scanStatus.textContent = 'Error: ' + data.error;
-          hudInference.textContent = 'AI INFERENCE IDLE';
-          scanNowBtn.disabled = false;
-          return;
-        }
-
-        renderBoxes(data.products || []);
-        addToCart(data.products || []);
-
-        scanStatus.textContent = `Detected ${data.count} item${data.count === 1 ? '' : 's'} (${data.inference_ms}ms)`;
-        hudInference.textContent = 'AI INFERENCE IDLE';
+        await runPredict(formData);
       } catch (err) {
-        scanStatus.textContent = 'Scan failed';
-        hudInference.textContent = 'AI INFERENCE IDLE';
+        dom.scanStatus.textContent = 'Scan failed';
+        dom.hudInference.textContent = 'AI INFERENCE IDLE';
         console.error(err);
       } finally {
-        scanNowBtn.disabled = false;
+        dom.scanNowBtn.disabled = false;
       }
     }
 
-    function renderBoxes(products) {
-      overlay.innerHTML = '';
-      if (!cameraImage.naturalWidth) return;
+    async function runPredict(formData) {
+      const res = await fetch('/predict', { method: 'POST', body: formData });
+      const data = await res.json();
 
-      const rect = cameraImage.getBoundingClientRect();
-      const scale = Math.min(rect.width / cameraImage.naturalWidth, rect.height / cameraImage.naturalHeight);
-      const renderedW = cameraImage.naturalWidth * scale;
-      const renderedH = cameraImage.naturalHeight * scale;
+      if (data.error) {
+        dom.scanStatus.textContent = 'Error: ' + data.error;
+        dom.hudInference.textContent = 'AI INFERENCE IDLE';
+        return;
+      }
+
+      lastDetectedProducts = data.products || [];
+      renderBoxes(lastDetectedProducts, liveMode ? dom.liveStreamImage : dom.cameraImage, true);
+      addToCart(lastDetectedProducts);
+
+      dom.scanStatus.textContent = `Detected ${data.count} item${data.count === 1 ? '' : 's'} (${data.inference_ms}ms)`;
+      dom.hudInference.textContent = 'AI INFERENCE IDLE';
+    }
+
+    function renderBoxes(products, sourceImage, triggerAudio = false) {
+      sourceImage = sourceImage || dom.cameraImage;
+      dom.overlay.innerHTML = '';
+      if (!sourceImage.naturalWidth) return;
+
+      const rect = sourceImage.getBoundingClientRect();
+      const scale = Math.min(rect.width / sourceImage.naturalWidth, rect.height / sourceImage.naturalHeight);
+      const renderedW = sourceImage.naturalWidth * scale;
+      const renderedH = sourceImage.naturalHeight * scale;
       const offsetX = (rect.width - renderedW) / 2;
       const offsetY = (rect.height - renderedH) / 2;
 
@@ -526,54 +728,11 @@
         label.textContent = isUnknown ? `Unknown Item • ${confPct}%` : `#${p.product} • ${confPct}%`;
         
         box.appendChild(label);
-        overlay.appendChild(box);
+        dom.overlay.appendChild(box);
       });
 
-      // الأصوات البرمجية المضمونة 100%
-      if (hasUnknownItem) {
-        // صوت إنذار للمنتجات غير المعروفة
-        try {
-          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          const osc = audioCtx.createOscillator();
-          const gain = audioCtx.createGain();
-          
-          osc.type = 'sawtooth';
-          osc.frequency.setValueAtTime(440, audioCtx.currentTime);
-          osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2);
-          
-          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-          
-          osc.connect(gain);
-          gain.connect(audioCtx.destination);
-          
-          osc.start();
-          osc.stop(audioCtx.currentTime + 0.5);
-        } catch (e) {
-          console.log("AudioContext error:", e);
-        }
-      } else if (products.length > 0) {
-        // صوت نجاح إذا كانت جميع المنتجات معروفة
-        try {
-          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          const osc = audioCtx.createOscillator();
-          const gain = audioCtx.createGain();
-          
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
-          osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.1);
-          
-          gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-          
-          osc.connect(gain);
-          gain.connect(audioCtx.destination);
-          
-          osc.start();
-          osc.stop(audioCtx.currentTime + 0.3);
-        } catch (e) {
-          console.log("Success Audio error:", e);
-        }
+      if (triggerAudio && products.length > 0) {
+        playAudioAlert(hasUnknownItem);
       }
     }
 

@@ -108,6 +108,29 @@
       padding: 8px 14px;
     }
 
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .search-input {
+      padding: 8px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      width: 260px;
+      background: var(--surface);
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
     .product-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -120,6 +143,12 @@
       border-radius: 12px;
       overflow: hidden;
       box-shadow: var(--shadow-sm);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .product-card:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
     }
 
     .product-thumb {
@@ -185,7 +214,7 @@
 
     .btn-secondary { background: var(--surface); }
 
-    /* Add New Scan modal */
+    /* Modal Styling */
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -263,13 +292,21 @@
       flex-wrap: wrap;
       gap: 6px;
       margin-top: 10px;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+
+    .preview-thumb-container {
+      position: relative;
+      display: inline-block;
     }
 
     .modal-preview-grid img {
-      width: 48px; height: 48px;
+      width: 52px; height: 52px;
       object-fit: cover;
       border-radius: 6px;
       border: 1px solid var(--border);
+      display: block;
     }
 
     .modal-actions {
@@ -318,17 +355,18 @@
     <div class="page-header">
       <div>
         <div class="page-title">Product Catalog</div>
-        <div class="page-subtitle">Live from <code>vectors/*.pkl</code> — the reference embeddings the matcher identifies scans against</div>
+        <div class="page-subtitle">Live from <code>vectors/*.pkl</code> — reference embeddings used for identification</div>
       </div>
       <div class="catalog-meta" id="catalog-meta">Loading catalog...</div>
     </div>
 
-    <div style="margin-bottom: 20px;">
+    <div class="toolbar">
       <button id="add-scan-btn" class="btn btn-primary" type="button">+ Add New Scan</button>
+      <input type="text" id="search-input" class="search-input" placeholder="Search by Product ID..." />
     </div>
 
     <div id="product-grid" class="product-grid"></div>
-    <div id="empty-state" class="empty-state" style="display: none;">No products found in the catalog.</div>
+    <div id="empty-state" class="empty-state" style="display: none;">No products found matching your query.</div>
   </div>
 
   <!-- Add New Scan Modal -->
@@ -343,13 +381,13 @@
         <div class="form-group">
           <label class="form-label" for="scan-product-id">Product ID</label>
           <input class="form-input" id="scan-product-id" name="product_id" placeholder="Leave blank to auto-assign next ID" autocomplete="off">
-          <div class="form-hint">Optional — matches the numbering used in <code>vectors/</code> (e.g. 015).</div>
+          <div class="form-hint">Optional — matches numbering in <code>vectors/</code> (e.g. 015).</div>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="scan-file-input">Reference photos</label>
           <input class="form-input" id="scan-file-input" type="file" accept="image/*" multiple required>
-          <div class="form-hint">Upload a few photos of the product from different angles — each gets run through the same ResNet50 + 12-rotation extraction used to build the rest of the catalog.</div>
+          <div class="form-hint">Upload photos from different angles — processed via ResNet50 + 12-rotation feature extraction.</div>
           <div id="scan-preview" class="modal-preview-grid"></div>
         </div>
 
@@ -364,48 +402,76 @@
   </div>
 
   <script>
+    let catalogCache = [];
+    let previewObjectUrls = [];
+
+    // Safe HTML Escaping for user-controlled strings
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, function(m) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+      });
+    }
+
     async function loadProducts() {
-      let data;
       try {
         const res = await fetch('/api/products');
-        data = await res.json();
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || 'Failed to fetch');
+
+        catalogCache = data.products || [];
+        updateCatalogMeta(catalogCache.length);
+        renderProducts(catalogCache);
       } catch (err) {
-        document.getElementById('catalog-meta').textContent = 'Failed to load catalog';
+        document.getElementById('catalog-meta').textContent = 'Error loading catalog';
         console.error(err);
-        return;
       }
+    }
 
+    function updateCatalogMeta(count) {
       document.getElementById('catalog-meta').textContent =
-        `${data.count} product${data.count === 1 ? '' : 's'} in catalog`;
+        `${count} product${count === 1 ? '' : 's'} in catalog`;
+    }
 
+    function renderProducts(products) {
       const grid = document.getElementById('product-grid');
       const emptyState = document.getElementById('empty-state');
 
-      if (!data.products || data.products.length === 0) {
+      if (!products || products.length === 0) {
+        grid.innerHTML = '';
         emptyState.style.display = 'block';
         return;
       }
 
-      grid.innerHTML = data.products.map(p => `
-        <div class="product-card">
-          ${p.image_url
-            ? `<img class="product-thumb" src="${p.image_url}" alt="Product ${p.id}">`
-            : `<div class="product-thumb-placeholder">No image</div>`
-          }
-          <div class="product-body">
-            <div class="product-id">Product #${p.id}</div>
-            <div class="product-stats">
-              <span>Reference samples: <b>${p.reference_samples}</b></span>
-              <span>Embedding dim: <b>${p.embedding_dim}</b></span>
+      emptyState.style.display = 'none';
+      grid.innerHTML = products.map(p => {
+        const safeId = escapeHtml(p.id);
+        return `
+          <div class="product-card">
+            ${p.image_url
+              ? `<img class="product-thumb" src="${escapeHtml(p.image_url)}" alt="Product ${safeId}">`
+              : `<div class="product-thumb-placeholder">No image</div>`
+            }
+            <div class="product-body">
+              <div class="product-id">Product #${safeId}</div>
+              <div class="product-stats">
+                <span>Reference samples: <b>${p.reference_samples ?? 0}</b></span>
+                <span>Embedding dim: <b>${p.embedding_dim ?? 'N/A'}</b></span>
+              </div>
             </div>
           </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
 
-    loadProducts();
+    // Local Search Filter
+    document.getElementById('search-input').addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      const filtered = catalogCache.filter(p => String(p.id).toLowerCase().includes(query));
+      renderProducts(filtered);
+    });
 
-    // --- Add New Scan modal ---
+    // --- Modal Controls & File Cleanup ---
     const backdrop = document.getElementById('scan-modal-backdrop');
     const openBtn = document.getElementById('add-scan-btn');
     const closeBtn = document.getElementById('scan-modal-close');
@@ -416,6 +482,11 @@
     const statusEl = document.getElementById('scan-modal-status');
     const submitBtn = document.getElementById('scan-submit-btn');
 
+    function clearObjectUrls() {
+      previewObjectUrls.forEach(url => URL.revokeObjectURL(url));
+      previewObjectUrls = [];
+    }
+
     function openModal() {
       backdrop.classList.add('open');
     }
@@ -423,6 +494,7 @@
     function closeModal() {
       backdrop.classList.remove('open');
       form.reset();
+      clearObjectUrls();
       preview.innerHTML = '';
       statusEl.textContent = '';
       statusEl.className = 'modal-status';
@@ -434,11 +506,22 @@
     backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeModal(); });
 
     fileInput.addEventListener('change', () => {
+      clearObjectUrls();
       preview.innerHTML = '';
+
       Array.from(fileInput.files).forEach(file => {
+        const imgUrl = URL.createObjectURL(file);
+        previewObjectUrls.push(imgUrl);
+
+        const container = document.createElement('div');
+        container.className = 'preview-thumb-container';
+
         const img = document.createElement('img');
-        img.src = URL.createObjectURL(file);
-        preview.appendChild(img);
+        img.src = imgUrl;
+        img.alt = 'Upload preview';
+
+        container.appendChild(img);
+        preview.appendChild(container);
       });
     });
 
@@ -473,17 +556,20 @@
 
         statusEl.textContent = `Added product #${data.product_id} (${data.reference_samples} reference samples).`;
         statusEl.className = 'modal-status success';
-        submitBtn.disabled = false;
 
         await loadProducts();
         setTimeout(closeModal, 1200);
       } catch (err) {
         statusEl.textContent = 'Network error — see console.';
         statusEl.className = 'modal-status error';
-        submitBtn.disabled = false;
         console.error(err);
+      } finally {
+        submitBtn.disabled = false;
       }
     });
+
+    // Initial load
+    loadProducts();
   </script>
 
 </body>
