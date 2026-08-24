@@ -1,793 +1,634 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Live Cart - ScanDesk OS</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg-main: #f8fafc;
-      --surface: #ffffff;
-      --border: #e2e8f0;
-      --border-focus: #cbd5e1;
-      --text-main: #0f172a;
-      --text-muted: #64748b;
-      --text-subtle: #94a3b8;
+{% extends "base.html" %}
 
-      --primary: #2563eb;
-      --primary-light: #eff6ff;
-      --success: #16a34a;
-      --success-bg: #f0fdf4;
-      --warning: #d97706;
-      --warning-bg: #fffbeb;
-      --danger: #dc2626;
-      --danger-bg: #fef2f2;
+{% set active_page = "livecart" %}
 
-      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+{% block title %}Live Cart - ScanDesk OS{% endblock %}
 
-      --radius-sm: 6px;
-      --radius-md: 10px;
+{% block styles %}
+<style>
+  .page-container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px;
+  }
 
-      --font-sans: 'Inter', sans-serif;
-      --font-mono: 'JetBrains Mono', monospace;
-    }
+  .camera-viewport {
+    position: relative;
+    width: 100%;
+    height: 440px;
+    background: #0f172a;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+  #camera-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #0f172a;
+    display: none;
+  }
 
-    body {
-      font-family: var(--font-sans);
-      background: var(--bg-main);
-      color: var(--text-main);
-      -webkit-font-smoothing: antialiased;
-    }
+  #box-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
 
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 14px 24px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-    }
+  .bounding-box {
+    position: absolute;
+    border: 2px solid #22c55e;
+    border-radius: 4px;
+    background: rgba(34, 197, 94, 0.12);
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.3);
+    transition: all 0.1s linear;
+  }
 
-    .brand { display: flex; align-items: center; gap: 12px; }
-
-    .brand-icon {
-      width: 36px; height: 36px;
-      border-radius: 8px;
-      background: var(--primary);
-      color: white;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 14px;
-    }
-
-    .brand-title { font-weight: 700; font-size: 15px; }
-    .brand-subtitle { font-size: 12px; color: var(--text-muted); }
-
-    .header-actions { display: flex; align-items: center; }
-
-    .system-badge {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 12px; font-weight: 600;
-      font-family: var(--font-mono);
-      padding: 6px 12px;
-      background: var(--success-bg);
-      color: var(--success);
-      border-radius: 20px;
-    }
-
-    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
-
-    .page-container {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 24px;
-    }
-
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 18px;
-      box-shadow: var(--shadow-sm);
-      margin-bottom: 20px;
-    }
-
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 14px;
-    }
-
-    .card-title { font-size: 14px; font-weight: 600; }
-
-    .camera-viewport {
-      position: relative;
-      width: 100%;
-      height: 440px;
-      background: #0f172a;
-      border-radius: var(--radius-md);
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #camera-image {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      background: #0f172a;
-      display: none;
-    }
-
-    #box-overlay {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-    }
-
-    .bounding-box {
-      position: absolute;
-      border: 2px solid #22c55e;
-      border-radius: 4px;
-      background: rgba(34, 197, 94, 0.12);
-      box-shadow: 0 0 12px rgba(0,0,0,0.3);
-      transition: all 0.1s linear;
-    }
-
-    @keyframes pulse-danger {
-      0% {
-        border-color: var(--danger);
-        background: rgba(220, 38, 38, 0.1);
-        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
-      }
-      70% {
-        border-color: #ef4444;
-        background: rgba(220, 38, 38, 0.3);
-        box-shadow: 0 0 16px 6px rgba(220, 38, 38, 0.2);
-      }
-      100% {
-        border-color: var(--danger);
-        background: rgba(220, 38, 38, 0.1);
-        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
-      }
-    }
-
-    .bounding-box.unknown-box {
+  @keyframes pulse-danger {
+    0% {
       border-color: var(--danger);
-      background: rgba(220, 38, 38, 0.15);
-      animation: pulse-danger 1.5s infinite;
+      background: rgba(220, 38, 38, 0.1);
+      box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
     }
-
-    .bounding-box.unknown-box .bbox-label {
+    70% {
+      border-color: #ef4444;
+      background: rgba(220, 38, 38, 0.3);
+      box-shadow: 0 0 16px 6px rgba(220, 38, 38, 0.2);
+    }
+    100% {
       border-color: var(--danger);
-      background: #7f1d1d;
+      background: rgba(220, 38, 38, 0.1);
+      box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
     }
+  }
 
-    .bbox-label {
-      position: absolute;
-      top: -22px;
-      left: -2px;
-      background: #0f172a;
-      color: white;
-      font-size: 11px;
-      font-family: var(--font-mono);
-      padding: 2px 6px;
-      border-radius: 4px;
-      border: 1px solid #22c55e;
-      white-space: nowrap;
-    }
+  .bounding-box.unknown-box {
+    border-color: var(--danger);
+    background: rgba(220, 38, 38, 0.15);
+    animation: pulse-danger 1.5s infinite;
+  }
 
-    .camera-placeholder {
-      color: var(--text-subtle);
-      text-align: center;
-    }
+  .bounding-box.unknown-box .bbox-label {
+    border-color: var(--danger);
+    background: #7f1d1d;
+  }
 
-    .camera-hud {
-      position: absolute;
-      top: 12px;
-      left: 12px;
-      right: 12px;
-      display: flex;
-      justify-content: space-between;
-      pointer-events: none;
-    }
+  .bbox-label {
+    position: absolute;
+    top: -22px;
+    left: -2px;
+    background: #0f172a;
+    color: white;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #22c55e;
+    white-space: nowrap;
+  }
 
-    .hud-chip {
-      background: rgba(15, 23, 42, 0.75);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: white;
-      padding: 4px 10px;
-      border-radius: var(--radius-sm);
-      font-size: 11px;
-      font-family: var(--font-mono);
-    }
+  .camera-placeholder {
+    color: var(--text-subtle);
+    text-align: center;
+  }
 
-    .camera-controls {
-      display: flex;
-      gap: 8px;
-      margin-top: 16px;
-    }
+  .camera-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+  }
 
-    .btn {
-      padding: 8px 14px;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--text-main);
-      transition: all 0.15s ease;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
+  .cart-summary {
+    display: flex;
+    gap: 24px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
 
-    .btn:hover { background: var(--bg-main); border-color: var(--border-focus); }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .cart-summary b {
+    color: var(--text-main);
+    font-size: 14px;
+  }
 
-    .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
-    .btn-primary:hover { background: #1d4ed8; }
+  .cart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 14px;
+  }
 
-    .btn-danger { color: var(--danger); border-color: var(--danger-bg); }
-    .btn-danger:hover { background: var(--danger-bg); }
+  .cart-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+  }
 
-    .cart-summary {
-      display: flex;
-      gap: 24px;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      color: var(--text-muted);
-    }
+  .cart-thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    background: var(--bg-main);
+    flex-shrink: 0;
+  }
 
-    .cart-summary b { color: var(--text-main); font-size: 14px; }
+  .cart-thumb-placeholder {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-main);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: var(--text-subtle);
+    flex-shrink: 0;
+  }
 
-    .cart-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 14px;
-    }
+  .cart-item-body {
+    min-width: 0;
+  }
 
-    .cart-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      background: var(--surface);
-    }
+  .cart-item-name {
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+  }
 
-    .cart-thumb {
-      width: 48px;
-      height: 48px;
-      border-radius: var(--radius-sm);
-      object-fit: cover;
-      background: var(--bg-main);
-      flex-shrink: 0;
-    }
+  .cart-item-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
 
-    .cart-thumb-placeholder {
-      width: 48px;
-      height: 48px;
-      border-radius: var(--radius-sm);
-      background: var(--bg-main);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      color: var(--text-subtle);
-      flex-shrink: 0;
-    }
+  .cart-item-qty {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primary);
+    background: var(--primary-light);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
 
-    .cart-item-body { min-width: 0; }
+  .empty-cart {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+</style>
+{% endblock %}
 
-    .cart-item-name {
-      font-size: 13px;
-      font-weight: 600;
-      font-family: var(--font-mono);
-    }
+{% block content %}
+<div class="page-container">
 
-    .cart-item-meta {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
+  <section class="card">
+    <div class="card-header">
+      <div class="card-title">📷 Desk Camera Feed</div>
+      <div id="scan-status" style="font-size: 12px; color: var(--text-muted); font-family: var(--font-mono);">No photo loaded</div>
+    </div>
 
-    .cart-item-qty {
-      margin-left: auto;
-      font-family: var(--font-mono);
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--primary);
-      background: var(--primary-light);
-      padding: 2px 8px;
-      border-radius: 10px;
-    }
+    <div class="camera-viewport" id="viewport">
+      <img id="camera-image" alt="Uploaded desk photo">
+      <img id="live-stream-image" alt="Live phone camera stream" style="display:none; width:100%; height:100%; object-fit:cover;"
+           {% if camera_connected %}src="{{ url_for('video_feed') }}"{% endif %}>
+      <div id="box-overlay"></div>
 
-    .empty-cart {
-      text-align: center;
-      padding: 40px 20px;
-      color: var(--text-muted);
-      font-size: 13px;
-    }
-  </style>
-</head>
-<body>
+      <div id="camera-placeholder" class="camera-placeholder" {% if camera_connected %}style="display:none;"{% endif %}>
+        <div style="margin-bottom: 10px; color: var(--text-subtle); font-size: 13px;">Upload a desk photo, or connect your phone as a live camera</div>
+        <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
+          <button id="upload-photo-btn" class="btn btn-primary">Upload Photo</button>
+          <input type="file" id="photo-input" accept="image/*" style="display:none">
+        </div>
+        <form id="connect-camera-form" style="display:flex; gap:8px; margin-top:10px; align-items:center; justify-content:center;">
+          <input type="text" id="camera-url-input" name="camera_url"
+                 placeholder="http://192.168.x.x:8080/video"
+                 style="padding: 8px 10px; width: 260px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 12px;" required>
+          <button type="submit" class="btn">Connect Phone Camera</button>
+        </form>
+        <div id="camera-connect-status" style="margin-top: 6px; font-size: 11px; color: var(--text-subtle);"></div>
+      </div>
 
-  <header class="header">
-    <div class="brand">
-      <div class="brand-icon">AI</div>
-      <div>
-        <div class="brand-title">ScanDesk OS</div>
-        <div class="brand-subtitle">Automated Checkout Monitoring</div>
+      <div class="camera-hud">
+        <div class="hud-chip" id="hud-camera-name">{{ "Phone Camera (Live)" if camera_connected else "Uploaded Photo Mode" }}</div>
+        <div class="hud-chip" id="hud-inference-status">AI INFERENCE IDLE</div>
       </div>
     </div>
 
-    <div class="header-actions">
-      <nav style="display: flex; gap: 4px; margin-right: 12px;">
-        <a href="/" style="font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--text-muted);">Dashboard</a>
-        <a href="/livecart" style="font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--primary); background: var(--primary-light);">Live Cart</a>
-        <a href="/products" style="font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; text-decoration: none; color: var(--text-muted);">All Products</a>
-      </nav>
-      <div class="system-badge">
-        <span class="status-dot"></span>
-        DESK #04 : ONLINE
+    <div class="camera-controls">
+      <button id="change-photo-btn" class="btn" {% if camera_connected %}style="display:none;"{% endif %} disabled>Change Photo</button>
+      <button id="disconnect-camera-btn" class="btn" {% if not camera_connected %}style="display:none;"{% endif %}>Disconnect Camera</button>
+      <button id="scan-now-btn" class="btn btn-primary" {% if not camera_connected %}disabled{% endif %}>Scan</button>
+      <button id="clear-cart-btn" class="btn btn-danger">Clear Cart</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-header">
+      <div class="card-title">Cart — Items Detected</div>
+      <div class="cart-summary">
+        <span>Unique items: <b id="cart-unique-count">0</b></span>
+        <span>Total units: <b id="cart-total-count">0</b></span>
       </div>
     </div>
-  </header>
 
-  <div class="page-container">
+    <div id="cart-grid" class="cart-grid"></div>
+    <div id="cart-empty" class="empty-cart">Cart is empty — upload a photo and press Scan to detect items.</div>
+  </section>
 
-    <section class="card">
-      <div class="card-header">
-        <div class="card-title">📷 Desk Camera Feed</div>
-        <div id="scan-status" style="font-size: 12px; color: var(--text-muted); font-family: var(--font-mono);">No photo loaded</div>
-      </div>
+</div>
 
-      <div class="camera-viewport" id="viewport">
-        <img id="camera-image" alt="Uploaded desk photo">
-        <img id="live-stream-image" alt="Live phone camera stream" style="display:none; width:100%; height:100%; object-fit:cover;"
-             {% if camera_connected %}src="{{ url_for('video_feed') }}"{% endif %}>
-        <div id="box-overlay"></div>
+<script>
+  let dom = {};
+  let currentPhotoFile = null;
+  let currentObjectUrl = null;
+  let liveMode = {{ 'true' if camera_connected else 'false' }};
+  let productCatalog = {}; 
+  let cart = {};           
+  let lastDetectedProducts = [];
+  let audioCtx = null;
 
-        <div id="camera-placeholder" class="camera-placeholder" {% if camera_connected %}style="display:none;"{% endif %}>
-          <div style="margin-bottom: 10px; color: var(--text-subtle); font-size: 13px;">Upload a desk photo, or connect your phone as a live camera</div>
-          <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
-            <button id="upload-photo-btn" class="btn btn-primary">Upload Photo</button>
-            <input type="file" id="photo-input" accept="image/*" style="display:none">
-          </div>
-          <form id="connect-camera-form" style="display:flex; gap:8px; margin-top:10px; align-items:center; justify-content:center;">
-            <input type="text" id="camera-url-input" name="camera_url"
-                   placeholder="http://192.168.x.x:8080/video"
-                   style="padding: 8px 10px; width: 260px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 12px;" required>
-            <button type="submit" class="btn">Connect Phone Camera</button>
-          </form>
-          <div id="camera-connect-status" style="margin-top: 6px; font-size: 11px; color: var(--text-subtle);"></div>
-        </div>
+  document.addEventListener('DOMContentLoaded', () => {
+    // Cache DOM elements
+    dom = {
+      cameraImage: document.getElementById('camera-image'),
+      liveStreamImage: document.getElementById('live-stream-image'),
+      overlay: document.getElementById('box-overlay'),
+      placeholder: document.getElementById('camera-placeholder'),
+      uploadPhotoBtn: document.getElementById('upload-photo-btn'),
+      changePhotoBtn: document.getElementById('change-photo-btn'),
+      photoInput: document.getElementById('photo-input'),
+      scanNowBtn: document.getElementById('scan-now-btn'),
+      clearCartBtn: document.getElementById('clear-cart-btn'),
+      connectCameraForm: document.getElementById('connect-camera-form'),
+      cameraUrlInput: document.getElementById('camera-url-input'),
+      cameraConnectStatus: document.getElementById('camera-connect-status'),
+      disconnectCameraBtn: document.getElementById('disconnect-camera-btn'),
+      scanStatus: document.getElementById('scan-status'),
+      hudInference: document.getElementById('hud-inference-status'),
+      hudCameraName: document.getElementById('hud-camera-name'),
+      viewport: document.getElementById('viewport')
+    };
 
-        <div class="camera-hud">
-          <div class="hud-chip" id="hud-camera-name">{{ "Phone Camera (Live)" if camera_connected else "Uploaded Photo Mode" }}</div>
-          <div class="hud-chip" id="hud-inference-status">AI INFERENCE IDLE</div>
-        </div>
-      </div>
-
-      <div class="camera-controls">
-        <button id="change-photo-btn" class="btn" {% if camera_connected %}style="display:none;"{% endif %} disabled>Change Photo</button>
-        <button id="disconnect-camera-btn" class="btn" {% if not camera_connected %}style="display:none;"{% endif %}>Disconnect Camera</button>
-        <button id="scan-now-btn" class="btn btn-primary" {% if not camera_connected %}disabled{% endif %}>Scan</button>
-        <button id="clear-cart-btn" class="btn btn-danger">Clear Cart</button>
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="card-header">
-        <div class="card-title">Cart — Items Detected</div>
-        <div class="cart-summary">
-          <span>Unique items: <b id="cart-unique-count">0</b></span>
-          <span>Total units: <b id="cart-total-count">0</b></span>
-        </div>
-      </div>
-
-      <div id="cart-grid" class="cart-grid"></div>
-      <div id="cart-empty" class="empty-cart">Cart is empty — upload a photo and press Scan to detect items.</div>
-    </section>
-
-  </div>
-
-  <script>
-    let dom = {};
-    let currentPhotoFile = null;
-    let currentObjectUrl = null;
-    let liveMode = {{ 'true' if camera_connected else 'false' }};
-    let productCatalog = {}; 
-    let cart = {};           
-    let lastDetectedProducts = [];
-    let audioCtx = null;
-
-    document.addEventListener('DOMContentLoaded', () => {
-      // Cache DOM elements
-      dom = {
-        cameraImage: document.getElementById('camera-image'),
-        liveStreamImage: document.getElementById('live-stream-image'),
-        overlay: document.getElementById('box-overlay'),
-        placeholder: document.getElementById('camera-placeholder'),
-        uploadPhotoBtn: document.getElementById('upload-photo-btn'),
-        changePhotoBtn: document.getElementById('change-photo-btn'),
-        photoInput: document.getElementById('photo-input'),
-        scanNowBtn: document.getElementById('scan-now-btn'),
-        clearCartBtn: document.getElementById('clear-cart-btn'),
-        connectCameraForm: document.getElementById('connect-camera-form'),
-        cameraUrlInput: document.getElementById('camera-url-input'),
-        cameraConnectStatus: document.getElementById('camera-connect-status'),
-        disconnectCameraBtn: document.getElementById('disconnect-camera-btn'),
-        scanStatus: document.getElementById('scan-status'),
-        hudInference: document.getElementById('hud-inference-status'),
-        hudCameraName: document.getElementById('hud-camera-name'),
-        viewport: document.getElementById('viewport')
-      };
-
-      if (dom.uploadPhotoBtn) dom.uploadPhotoBtn.addEventListener('click', openFilePicker);
-      if (dom.changePhotoBtn) dom.changePhotoBtn.addEventListener('click', openFilePicker);
-      if (dom.photoInput) dom.photoInput.addEventListener('change', onPhotoSelected);
-      if (dom.connectCameraForm) dom.connectCameraForm.addEventListener('submit', onConnectCamera);
-      if (dom.disconnectCameraBtn) dom.disconnectCameraBtn.addEventListener('click', onDisconnectCamera);
-      if (dom.scanNowBtn) dom.scanNowBtn.addEventListener('click', scanNow);
-      if (dom.clearCartBtn) dom.clearCartBtn.addEventListener('click', () => {
-        cart = {};
-        renderCart();
-      });
-
-      // Enable Web Audio API on initial click
-      document.body.addEventListener('click', initAudio, { once: true });
-
-      // Auto recalculate bounding box positions on window/viewport resize
-      const resizeObserver = new ResizeObserver(() => {
-        if (lastDetectedProducts.length > 0) {
-          renderBoxes(lastDetectedProducts, liveMode ? dom.liveStreamImage : dom.cameraImage, false);
-        }
-      });
-      resizeObserver.observe(dom.viewport);
-
-      if (liveMode) enterLiveMode(false);
-
-      loadCatalog();
+    if (dom.uploadPhotoBtn) dom.uploadPhotoBtn.addEventListener('click', openFilePicker);
+    if (dom.changePhotoBtn) dom.changePhotoBtn.addEventListener('click', openFilePicker);
+    if (dom.photoInput) dom.photoInput.addEventListener('change', onPhotoSelected);
+    if (dom.connectCameraForm) dom.connectCameraForm.addEventListener('submit', onConnectCamera);
+    if (dom.disconnectCameraBtn) dom.disconnectCameraBtn.addEventListener('click', onDisconnectCamera);
+    if (dom.scanNowBtn) dom.scanNowBtn.addEventListener('click', scanNow);
+    if (dom.clearCartBtn) dom.clearCartBtn.addEventListener('click', () => {
+      cart = {};
+      renderCart();
     });
 
-    function initAudio() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Enable Web Audio API on initial click
+    document.body.addEventListener('click', initAudio, { once: true });
+
+    // Auto recalculate bounding box positions on window/viewport resize
+    const resizeObserver = new ResizeObserver(() => {
+      if (lastDetectedProducts.length > 0) {
+        renderBoxes(lastDetectedProducts, liveMode ? dom.liveStreamImage : dom.cameraImage, false);
       }
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-      }
+    });
+    resizeObserver.observe(dom.viewport);
+
+    if (liveMode) enterLiveMode(false);
+
+    loadCatalog();
+  });
+
+  function initAudio() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
-
-    function playAudioAlert(isUnknown) {
-      if (!audioCtx) initAudio();
-      if (!audioCtx) return;
-
-      try {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        const now = audioCtx.currentTime;
-
-        if (isUnknown) {
-          osc.type = 'sawtooth';
-          osc.frequency.setValueAtTime(440, now);
-          osc.frequency.exponentialRampToValueAtTime(880, now + 0.2);
-          gain.gain.setValueAtTime(0.2, now);
-          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
-          osc.connect(gain);
-          gain.connect(audioCtx.destination);
-          osc.start(now);
-          osc.stop(now + 0.5);
-        } else {
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(587.33, now);
-          osc.frequency.setValueAtTime(880, now + 0.1);
-          gain.gain.setValueAtTime(0.15, now);
-          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-          osc.connect(gain);
-          gain.connect(audioCtx.destination);
-          osc.start(now);
-          osc.stop(now + 0.3);
-        }
-      } catch (e) {
-        console.warn("Audio Context playback error:", e);
-      }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
     }
+  }
 
-    async function onConnectCamera(e) {
-      e.preventDefault();
-      const url = dom.cameraUrlInput.value.trim();
-      if (!url) return;
+  function playAudioAlert(isUnknown) {
+    if (!audioCtx) initAudio();
+    if (!audioCtx) return;
 
-      dom.cameraConnectStatus.textContent = 'Connecting...';
+    try {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      const now = audioCtx.currentTime;
 
-      try {
-        const formData = new FormData();
-        formData.append('camera_url', url);
-        const res = await fetch('/connect_camera', { method: 'POST', body: formData });
-        const data = await res.json();
-
-        if (!data.connected) {
-          dom.cameraConnectStatus.textContent = 'Could not connect — check the URL and network connection.';
-          return;
-        }
-
-        dom.cameraConnectStatus.textContent = '';
-        enterLiveMode(true);
-      } catch (err) {
-        dom.cameraConnectStatus.textContent = 'Connection failed.';
-        console.error(err);
-      }
-    }
-
-    async function onDisconnectCamera() {
-      try {
-        await fetch('/disconnect_camera', { method: 'POST' });
-      } catch (err) {
-        console.error(err);
-      }
-      exitLiveMode();
-    }
-
-    function enterLiveMode(setSrc) {
-      liveMode = true;
-      currentPhotoFile = null;
-      lastDetectedProducts = [];
-      dom.overlay.innerHTML = '';
-
-      if (setSrc) {
-        dom.liveStreamImage.src = '/video_feed?t=' + Date.now();
-      }
-      dom.liveStreamImage.style.display = 'block';
-      dom.cameraImage.style.display = 'none';
-      dom.placeholder.style.display = 'none';
-
-      dom.changePhotoBtn.style.display = 'none';
-      dom.disconnectCameraBtn.style.display = 'inline-flex';
-      dom.scanNowBtn.disabled = false;
-
-      dom.hudCameraName.textContent = 'Phone Camera (Live)';
-      dom.scanStatus.textContent = 'Live feed connected — press Scan to detect items';
-    }
-
-    function exitLiveMode() {
-      liveMode = false;
-      dom.liveStreamImage.style.display = 'none';
-      dom.liveStreamImage.src = '';
-      dom.cameraImage.style.display = 'none';
-      dom.placeholder.style.display = 'flex';
-
-      dom.changePhotoBtn.style.display = 'inline-flex';
-      dom.disconnectCameraBtn.style.display = 'none';
-      dom.scanNowBtn.disabled = !currentPhotoFile;
-
-      dom.hudCameraName.textContent = 'Uploaded Photo Mode';
-      dom.scanStatus.textContent = 'No photo loaded';
-    }
-
-    async function loadCatalog() {
-      try {
-        const res = await fetch('/api/products');
-        const data = await res.json();
-        (data.products || []).forEach(p => { productCatalog[p.id] = p; });
-      } catch (err) {
-        console.error('Failed to load product catalog', err);
-      }
-    }
-
-    function openFilePicker() {
-      if (dom.photoInput) dom.photoInput.click();
-    }
-
-    function onPhotoSelected(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      if (liveMode) exitLiveMode();
-
-      // Revoke old blob to prevent memory leak
-      if (currentObjectUrl) {
-        URL.revokeObjectURL(currentObjectUrl);
-      }
-
-      currentPhotoFile = file;
-      lastDetectedProducts = [];
-      dom.overlay.innerHTML = '';
-
-      currentObjectUrl = URL.createObjectURL(file);
-      dom.cameraImage.src = currentObjectUrl;
-      dom.cameraImage.style.display = 'block';
-      dom.placeholder.style.display = 'none';
-
-      dom.hudCameraName.textContent = file.name;
-      dom.scanNowBtn.disabled = false;
-      dom.changePhotoBtn.disabled = false;
-      dom.scanStatus.textContent = 'Photo loaded — ready to scan';
-    }
-
-    async function scanNow() {
-      if (liveMode) {
-        await scanLiveFrame();
+      if (isUnknown) {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.2);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.5);
       } else {
-        await scanUploadedPhoto();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, now);
+        osc.frequency.setValueAtTime(880, now + 0.1);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.3);
       }
+    } catch (e) {
+      console.warn("Audio Context playback error:", e);
     }
+  }
 
-    async function scanLiveFrame() {
-      dom.scanStatus.textContent = 'Capturing frame...';
-      dom.hudInference.textContent = 'AI INFERENCE RUNNING';
-      dom.scanNowBtn.disabled = true;
+  async function onConnectCamera(e) {
+    e.preventDefault();
+    const url = dom.cameraUrlInput.value.trim();
+    if (!url) return;
 
-      try {
-        const frameRes = await fetch('/capture_frame');
-        if (!frameRes.ok) {
-          const errData = await frameRes.json().catch(() => ({}));
-          dom.scanStatus.textContent = 'Error: ' + (errData.error || 'could not capture frame');
-          dom.hudInference.textContent = 'AI INFERENCE IDLE';
-          return;
-        }
-        const blob = await frameRes.blob();
+    dom.cameraConnectStatus.textContent = 'Connecting...';
 
-        const formData = new FormData();
-        formData.append('image', blob, 'live_frame.jpg');
-
-        await runPredict(formData);
-      } catch (err) {
-        dom.scanStatus.textContent = 'Scan failed';
-        dom.hudInference.textContent = 'AI INFERENCE IDLE';
-        console.error(err);
-      } finally {
-        dom.scanNowBtn.disabled = false;
-      }
-    }
-
-    async function scanUploadedPhoto() {
-      if (!currentPhotoFile) return;
-
+    try {
       const formData = new FormData();
-      formData.append('image', currentPhotoFile, currentPhotoFile.name);
-
-      dom.scanStatus.textContent = 'Scanning...';
-      dom.hudInference.textContent = 'AI INFERENCE RUNNING';
-      dom.scanNowBtn.disabled = true;
-
-      try {
-        await runPredict(formData);
-      } catch (err) {
-        dom.scanStatus.textContent = 'Scan failed';
-        dom.hudInference.textContent = 'AI INFERENCE IDLE';
-        console.error(err);
-      } finally {
-        dom.scanNowBtn.disabled = false;
-      }
-    }
-
-    async function runPredict(formData) {
-      const res = await fetch('/predict', { method: 'POST', body: formData });
+      formData.append('camera_url', url);
+      const res = await fetch('/connect_camera', { method: 'POST', body: formData });
       const data = await res.json();
 
-      if (data.error) {
-        dom.scanStatus.textContent = 'Error: ' + data.error;
+      if (!data.connected) {
+        dom.cameraConnectStatus.textContent = 'Could not connect — check the URL and network connection.';
+        return;
+      }
+
+      dom.cameraConnectStatus.textContent = '';
+      enterLiveMode(true);
+    } catch (err) {
+      dom.cameraConnectStatus.textContent = 'Connection failed.';
+      console.error(err);
+    }
+  }
+
+  async function onDisconnectCamera() {
+    try {
+      await fetch('/disconnect_camera', { method: 'POST' });
+    } catch (err) {
+      console.error(err);
+    }
+    exitLiveMode();
+  }
+
+  function enterLiveMode(setSrc) {
+    liveMode = true;
+    currentPhotoFile = null;
+    lastDetectedProducts = [];
+    dom.overlay.innerHTML = '';
+
+    if (setSrc) {
+      dom.liveStreamImage.src = '/video_feed?t=' + Date.now();
+    }
+    dom.liveStreamImage.style.display = 'block';
+    dom.cameraImage.style.display = 'none';
+    dom.placeholder.style.display = 'none';
+
+    dom.changePhotoBtn.style.display = 'none';
+    dom.disconnectCameraBtn.style.display = 'inline-flex';
+    dom.scanNowBtn.disabled = false;
+
+    dom.hudCameraName.textContent = 'Phone Camera (Live)';
+    dom.scanStatus.textContent = 'Live feed connected — press Scan to detect items';
+  }
+
+  function exitLiveMode() {
+    liveMode = false;
+    dom.liveStreamImage.style.display = 'none';
+    dom.liveStreamImage.src = '';
+    dom.cameraImage.style.display = 'none';
+    dom.placeholder.style.display = 'flex';
+
+    dom.changePhotoBtn.style.display = 'inline-flex';
+    dom.disconnectCameraBtn.style.display = 'none';
+    dom.scanNowBtn.disabled = !currentPhotoFile;
+
+    dom.hudCameraName.textContent = 'Uploaded Photo Mode';
+    dom.scanStatus.textContent = 'No photo loaded';
+  }
+
+  async function loadCatalog() {
+    try {
+      const res = await fetch('/api/products');
+      const data = await res.json();
+      (data.products || []).forEach(p => { productCatalog[p.id] = p; });
+    } catch (err) {
+      console.error('Failed to load product catalog', err);
+    }
+  }
+
+  function openFilePicker() {
+    if (dom.photoInput) dom.photoInput.click();
+  }
+
+  function onPhotoSelected(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (liveMode) exitLiveMode();
+
+    if (currentObjectUrl) {
+      URL.revokeObjectURL(currentObjectUrl);
+    }
+
+    currentPhotoFile = file;
+    lastDetectedProducts = [];
+    dom.overlay.innerHTML = '';
+
+    currentObjectUrl = URL.createObjectURL(file);
+    dom.cameraImage.src = currentObjectUrl;
+    dom.cameraImage.style.display = 'block';
+    dom.placeholder.style.display = 'none';
+
+    dom.hudCameraName.textContent = file.name;
+    dom.scanNowBtn.disabled = false;
+    dom.changePhotoBtn.disabled = false;
+    dom.scanStatus.textContent = 'Photo loaded — ready to scan';
+  }
+
+  async function scanNow() {
+    if (liveMode) {
+      await scanLiveFrame();
+    } else {
+      await scanUploadedPhoto();
+    }
+  }
+
+  async function scanLiveFrame() {
+    dom.scanStatus.textContent = 'Capturing frame...';
+    dom.hudInference.textContent = 'AI INFERENCE RUNNING';
+    dom.scanNowBtn.disabled = true;
+
+    try {
+      const frameRes = await fetch('/capture_frame');
+      if (!frameRes.ok) {
+        const errData = await frameRes.json().catch(() => ({}));
+        dom.scanStatus.textContent = 'Error: ' + (errData.error || 'could not capture frame');
         dom.hudInference.textContent = 'AI INFERENCE IDLE';
         return;
       }
+      const blob = await frameRes.blob();
 
-      lastDetectedProducts = data.products || [];
-      renderBoxes(lastDetectedProducts, liveMode ? dom.liveStreamImage : dom.cameraImage, true);
-      addToCart(lastDetectedProducts);
+      const formData = new FormData();
+      formData.append('image', blob, 'live_frame.jpg');
 
-      dom.scanStatus.textContent = `Detected ${data.count} item${data.count === 1 ? '' : 's'} (${data.inference_ms}ms)`;
+      await runPredict(formData);
+    } catch (err) {
+      dom.scanStatus.textContent = 'Scan failed';
       dom.hudInference.textContent = 'AI INFERENCE IDLE';
+      console.error(err);
+    } finally {
+      dom.scanNowBtn.disabled = false;
+    }
+  }
+
+  async function scanUploadedPhoto() {
+    if (!currentPhotoFile) return;
+
+    const formData = new FormData();
+    formData.append('image', currentPhotoFile, currentPhotoFile.name);
+
+    dom.scanStatus.textContent = 'Scanning...';
+    dom.hudInference.textContent = 'AI INFERENCE RUNNING';
+    dom.scanNowBtn.disabled = true;
+
+    try {
+      await runPredict(formData);
+    } catch (err) {
+      dom.scanStatus.textContent = 'Scan failed';
+      dom.hudInference.textContent = 'AI INFERENCE IDLE';
+      console.error(err);
+    } finally {
+      dom.scanNowBtn.disabled = false;
+    }
+  }
+
+  async function runPredict(formData) {
+    const res = await fetch('/predict', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if (data.error) {
+      dom.scanStatus.textContent = 'Error: ' + data.error;
+      dom.hudInference.textContent = 'AI INFERENCE IDLE';
+      return;
     }
 
-    function renderBoxes(products, sourceImage, triggerAudio = false) {
-      sourceImage = sourceImage || dom.cameraImage;
-      dom.overlay.innerHTML = '';
-      if (!sourceImage.naturalWidth) return;
+    lastDetectedProducts = data.products || [];
+    renderBoxes(lastDetectedProducts, liveMode ? dom.liveStreamImage : dom.cameraImage, true);
+    addToCart(lastDetectedProducts);
 
-      const rect = sourceImage.getBoundingClientRect();
-      const scale = Math.min(rect.width / sourceImage.naturalWidth, rect.height / sourceImage.naturalHeight);
-      const renderedW = sourceImage.naturalWidth * scale;
-      const renderedH = sourceImage.naturalHeight * scale;
-      const offsetX = (rect.width - renderedW) / 2;
-      const offsetY = (rect.height - renderedH) / 2;
+    dom.scanStatus.textContent = `Detected ${data.count} item${data.count === 1 ? '' : 's'} (${data.inference_ms}ms)`;
+    dom.hudInference.textContent = 'AI INFERENCE IDLE';
+  }
 
-      let hasUnknownItem = false;
+  function renderBoxes(products, sourceImage, triggerAudio = false) {
+    sourceImage = sourceImage || dom.cameraImage;
+    dom.overlay.innerHTML = '';
+    if (!sourceImage.naturalWidth) return;
 
-      products.forEach(p => {
-        const [x1, y1, x2, y2] = p.bbox;
-        const box = document.createElement('div');
-        
-        const isUnknown = (p.product === 'unknown' || p.confidence < 0.55);
-        if (isUnknown) hasUnknownItem = true;
+    const rect = sourceImage.getBoundingClientRect();
+    const scale = Math.min(rect.width / sourceImage.naturalWidth, rect.height / sourceImage.naturalHeight);
+    const renderedW = sourceImage.naturalWidth * scale;
+    const renderedH = sourceImage.naturalHeight * scale;
+    const offsetX = (rect.width - renderedW) / 2;
+    const offsetY = (rect.height - renderedH) / 2;
 
-        box.className = isUnknown ? 'bounding-box unknown-box' : 'bounding-box';
-        box.style.left = (offsetX + x1 * scale) + 'px';
-        box.style.top = (offsetY + y1 * scale) + 'px';
-        box.style.width = ((x2 - x1) * scale) + 'px';
-        box.style.height = ((y2 - y1) * scale) + 'px';
+    let hasUnknownItem = false;
 
-        const label = document.createElement('div');
-        label.className = 'bbox-label';
-        const confPct = (p.confidence * 100).toFixed(1);
-        
-        label.textContent = isUnknown ? `Unknown Item • ${confPct}%` : `#${p.product} • ${confPct}%`;
-        
-        box.appendChild(label);
-        dom.overlay.appendChild(box);
-      });
+    products.forEach(p => {
+      const [x1, y1, x2, y2] = p.bbox;
+      const box = document.createElement('div');
+      
+      const isUnknown = (p.product === 'unknown' || p.confidence < 0.55);
+      if (isUnknown) hasUnknownItem = true;
 
-      if (triggerAudio && products.length > 0) {
-        playAudioAlert(hasUnknownItem);
+      box.className = isUnknown ? 'bounding-box unknown-box' : 'bounding-box';
+      box.style.left = (offsetX + x1 * scale) + 'px';
+      box.style.top = (offsetY + y1 * scale) + 'px';
+      box.style.width = ((x2 - x1) * scale) + 'px';
+      box.style.height = ((y2 - y1) * scale) + 'px';
+
+      const label = document.createElement('div');
+      label.className = 'bbox-label';
+      const confPct = (p.confidence * 100).toFixed(1);
+      
+      label.textContent = isUnknown ? `Unknown Item • ${confPct}%` : `#${p.product} • ${confPct}%`;
+      
+      box.appendChild(label);
+      dom.overlay.appendChild(box);
+    });
+
+    if (triggerAudio && products.length > 0) {
+      playAudioAlert(hasUnknownItem);
+    }
+  }
+
+  function addToCart(products) {
+    products.forEach(p => {
+      if (p.product === 'unknown') return;
+      if (!cart[p.product]) {
+        cart[p.product] = { count: 0, bestConfidence: 0 };
       }
+      cart[p.product].count += 1;
+      cart[p.product].bestConfidence = Math.max(cart[p.product].bestConfidence, p.confidence);
+    });
+    renderCart();
+  }
+
+  function renderCart() {
+    const grid = document.getElementById('cart-grid');
+    const emptyState = document.getElementById('cart-empty');
+    const ids = Object.keys(cart);
+
+    let totalUnits = 0;
+    ids.forEach(id => totalUnits += cart[id].count);
+
+    document.getElementById('cart-unique-count').textContent = ids.length;
+    document.getElementById('cart-total-count').textContent = totalUnits;
+
+    if (ids.length === 0) {
+      grid.innerHTML = '';
+      emptyState.style.display = 'block';
+      return;
     }
+    emptyState.style.display = 'none';
 
-    function addToCart(products) {
-      products.forEach(p => {
-        if (p.product === 'unknown') return;
-        if (!cart[p.product]) {
-          cart[p.product] = { count: 0, bestConfidence: 0 };
-        }
-        cart[p.product].count += 1;
-        cart[p.product].bestConfidence = Math.max(cart[p.product].bestConfidence, p.confidence);
-      });
-      renderCart();
-    }
+    grid.innerHTML = ids.map(id => {
+      const item = cart[id];
+      const catalogEntry = productCatalog[id];
+      const imageUrl = catalogEntry && catalogEntry.image_url;
+      const confPct = (item.bestConfidence * 100).toFixed(1);
 
-    function renderCart() {
-      const grid = document.getElementById('cart-grid');
-      const emptyState = document.getElementById('cart-empty');
-      const ids = Object.keys(cart);
-
-      let totalUnits = 0;
-      ids.forEach(id => totalUnits += cart[id].count);
-
-      document.getElementById('cart-unique-count').textContent = ids.length;
-      document.getElementById('cart-total-count').textContent = totalUnits;
-
-      if (ids.length === 0) {
-        grid.innerHTML = '';
-        emptyState.style.display = 'block';
-        return;
-      }
-      emptyState.style.display = 'none';
-
-      grid.innerHTML = ids.map(id => {
-        const item = cart[id];
-        const catalogEntry = productCatalog[id];
-        const imageUrl = catalogEntry && catalogEntry.image_url;
-        const confPct = (item.bestConfidence * 100).toFixed(1);
-
-        return `
-          <div class="cart-item">
-            ${imageUrl
-              ? `<img class="cart-thumb" src="${imageUrl}" alt="Product ${id}">`
-              : `<div class="cart-thumb-placeholder">#${id}</div>`
-            }
-            <div class="cart-item-body">
-              <div class="cart-item-name">Product #${id}</div>
-              <div class="cart-item-meta">Best match: ${confPct}%</div>
-            </div>
-            <div class="cart-item-qty">×${item.count}</div>
+      return `
+        <div class="cart-item">
+          ${imageUrl
+            ? `<img class="cart-thumb" src="${imageUrl}" alt="Product ${id}">`
+            : `<div class="cart-thumb-placeholder">#${id}</div>`
+          }
+          <div class="cart-item-body">
+            <div class="cart-item-name">Product #${id}</div>
+            <div class="cart-item-meta">Best match: ${confPct}%</div>
           </div>
-        `;
-      }).join('');
-    }
-  </script>
-
-</body>
-</html>
+          <div class="cart-item-qty">×${item.count}</div>
+        </div>
+      `;
+    }).join('');
+  }
+</script>
+{% endblock %}

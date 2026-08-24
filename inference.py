@@ -27,7 +27,6 @@ from ultralytics import YOLO, SAM
 BASE_DIR = Path(__file__).parent
 MODELS_DIR = BASE_DIR / "models"          # put product_detector.pt + mobile_sam.pt here
 VECTORS_DIR = BASE_DIR / "vectors"  
-
 DETECTOR_PATH = MODELS_DIR / "product_detector.pt"
 SAM_PATH = MODELS_DIR / "mobile_sam.pt"
 
