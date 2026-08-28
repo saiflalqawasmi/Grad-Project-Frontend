@@ -1,25 +1,25 @@
 import cv2
 
-CAMERA_URL = request.form["camera_url"]
+# Replace with the IP and port shown in your DroidCam app
+DROIDCAM_URL = "http://192.168.31.66:4747/video"
 
-cap = cv2.VideoCapture(CAMERA_URL)
+cap = cv2.VideoCapture(DROIDCAM_URL)
 
 if not cap.isOpened():
-    print("Cannot connect to phone camera")
+    print("Failed to connect to DroidCam. Check the IP/port and that both devices are on the same network.")
     exit()
 
-print("Phone camera connected")
+print("Connected. Press 'q' to quit.")
 
 while True:
-    success, frame = cap.read()
-
-    if not success:
-        print("Failed to read frame")
+    ret, frame = cap.read()
+    if not ret:
+        print("Lost connection to stream.")
         break
 
-    cv2.imshow("Phone Camera", frame)
+    cv2.imshow("DroidCam Live Feed", frame)
 
-    if cv2.waitKey(1) & 0xFF == ord("q"):
+    if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
 cap.release()

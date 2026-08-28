@@ -4,8 +4,11 @@ Inference pipeline for the product-detection dashboard.
 Loads three things ONCE at process start (not per-request):
   1. product_detector.pt  -> trained YOLO, finds product bounding boxes
   2. mobile_sam.pt         -> MobileSAM, segments each box into a clean mask
-  3. vectors/*.pkl         -> ResNet50 catalog embeddings, used to identify
+  3. vectors/*.pkl         -> DINOv2 catalog embeddings, used to identify
                               which product each isolated crop actually is
+                              (run rebuild_vectors.py if these were built
+                              with an older extractor -- dims must match
+                              FeatureExtractor.embed()'s output size)
 
 yolo11n.pt is intentionally NOT loaded here — it's only the base checkpoint
 used during training (see project final.ipynb, TRAIN_YOLO branch) and has

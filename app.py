@@ -27,7 +27,8 @@ _extractor = None
 
 
 def get_extractor():
-    """Lazy singleton — only loads ResNet50, not the full YOLO/SAM pipeline."""
+    """Lazy singleton for the DINOv2 FeatureExtractor (see inference.py) --
+    only loads the extractor, not the full YOLO/SAM pipeline."""
     global _extractor
     if _extractor is None:
         _extractor = FeatureExtractor()
@@ -85,9 +86,9 @@ def video_feed():
 @app.route("/api/products")
 def api_products():
     """
-    Reads the real catalog straight out of vectors/*.pkl — no hardcoded
-    product list. Each file's payload has item_id and the ResNet50
-    feature matrix (num_samples x 2048) used by the matcher.
+    Reads the real catalog straight out of vectors/*.pkl -- no hardcoded
+    product list. Each file's payload has item_id and the DINOv2 feature
+    matrix (num_samples x embedding_dim) used by the matcher.
     """
     # تحديد مسار مجلد clean_data الرئيسي تلقائياً من مسار vectors
     clean_data_dir = VECTORS_DIR.parent / "clean_data"
@@ -126,9 +127,9 @@ def api_products():
 def add_product():
     """
     Builds a real catalog entry from uploaded photos: runs each image
-    through the same ResNet50 + 12-angle-rotation extraction used in
-    project final.ipynb, saves it as a new vectors/<id>_vector.pkl, and
-    stores the first photo as the catalog thumbnail.
+    through the same DINOv2 + 12-angle-rotation extraction used by the
+    live matcher, saves it as a new vectors/<id>_vector.pkl, and stores
+    the first photo as the catalog thumbnail.
     """
     files = request.files.getlist("images")
     if not files:
@@ -251,4 +252,4 @@ if __name__ == "__main__":
     # Warm the pipeline at boot so the first request isn't slow, and so
     # missing model files fail fast instead of on first upload.
     get_pipeline()
-    app.run(debug=True)
+    app.run(debug=True, threaded=True)

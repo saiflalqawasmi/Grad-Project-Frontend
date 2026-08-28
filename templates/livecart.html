@@ -92,9 +92,38 @@
     white-space: nowrap;
   }
 
+  .bounding-box.pending-box {
+    border-color: #eab308;
+    background: rgba(234, 179, 8, 0.15);
+  }
+
+  .bounding-box.pending-box .bbox-label {
+    border-color: #eab308;
+    background: #713f12;
+  }
+
+  .bounding-box.confirmed-box {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.12);
+  }
+
+  .bounding-box.confirmed-box .bbox-label {
+    border-color: #22c55e;
+    background: #14532d;
+  }
+
+  #auto-scan-btn[aria-pressed="true"] {
+    background: #22c55e;
+    border-color: #22c55e;
+    color: white;
+  }
+
   .camera-placeholder {
     color: var(--text-subtle);
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
 
   .camera-controls {
@@ -201,7 +230,9 @@
 
     <div class="camera-viewport" id="viewport">
       <img id="camera-image" alt="Uploaded desk photo">
-      <img id="live-stream-image" alt="Live phone camera stream" style="display:none; width:100%; height:100%; object-fit:cover;"
+      <img id="live-stream-image" alt="Live phone camera stream"
+           style="display:none; position:absolute; inset:0; width:100%; height:100%; object-fit:cover;"
+           onerror="onLiveStreamError()"
            {% if camera_connected %}src="{{ url_for('video_feed') }}"{% endif %}>
       <div id="box-overlay"></div>
 
@@ -230,6 +261,7 @@
       <button id="change-photo-btn" class="btn" {% if camera_connected %}style="display:none;"{% endif %} disabled>Change Photo</button>
       <button id="disconnect-camera-btn" class="btn" {% if not camera_connected %}style="display:none;"{% endif %}>Disconnect Camera</button>
       <button id="scan-now-btn" class="btn btn-primary" {% if not camera_connected %}disabled{% endif %}>Scan</button>
+      <button id="auto-scan-btn" class="btn" aria-pressed="false" {% if not camera_connected %}disabled{% endif %}>Auto Scan: OFF</button>
       <button id="clear-cart-btn" class="btn btn-danger">Clear Cart</button>
     </div>
   </section>
@@ -237,9 +269,12 @@
   <section class="card">
     <div class="card-header">
       <div class="card-title">Cart — Items Detected</div>
-      <div class="cart-summary">
-        <span>Unique items: <b id="cart-unique-count">0</b></span>
-        <span>Total units: <b id="cart-total-count">0</b></span>
+      <div style="display:flex; align-items:center; gap:16px;">
+        <div class="cart-summary">
+          <span>Unique items: <b id="cart-unique-count">0</b></span>
+          <span>Total units: <b id="cart-total-count">0</b></span>
+        </div>
+        <button id="print-receipt-btn" class="btn">🧾 Print Receipt</button>
       </div>
     </div>
 
@@ -259,6 +294,15 @@
   let lastDetectedProducts = [];
   let audioCtx = null;
 
+  // Auto Scan state
+  const AUTO_SCAN_INTERVAL_MS = 2000;
+  const CONFIRM_THRESHOLD = 2; // consecutive sightings before a new item is committed to cart
+  let autoScanEnabled = false;
+  let autoScanTimer = null;
+  let scanInFlight = false;
+  let pendingCounts = {};            // productId -> consecutive-sighting count, not yet confirmed
+  let confirmedProducts = new Set(); // productId already confirmed + added to cart this session
+
   document.addEventListener('DOMContentLoaded', () => {
     // Cache DOM elements
     dom = {
@@ -270,6 +314,7 @@
       changePhotoBtn: document.getElementById('change-photo-btn'),
       photoInput: document.getElementById('photo-input'),
       scanNowBtn: document.getElementById('scan-now-btn'),
+      autoScanBtn: document.getElementById('auto-scan-btn'),
       clearCartBtn: document.getElementById('clear-cart-btn'),
       connectCameraForm: document.getElementById('connect-camera-form'),
       cameraUrlInput: document.getElementById('camera-url-input'),
@@ -278,6 +323,7 @@
       scanStatus: document.getElementById('scan-status'),
       hudInference: document.getElementById('hud-inference-status'),
       hudCameraName: document.getElementById('hud-camera-name'),
+      printReceiptBtn: document.getElementById('print-receipt-btn'),
       viewport: document.getElementById('viewport')
     };
 
@@ -287,8 +333,12 @@
     if (dom.connectCameraForm) dom.connectCameraForm.addEventListener('submit', onConnectCamera);
     if (dom.disconnectCameraBtn) dom.disconnectCameraBtn.addEventListener('click', onDisconnectCamera);
     if (dom.scanNowBtn) dom.scanNowBtn.addEventListener('click', scanNow);
+    if (dom.autoScanBtn) dom.autoScanBtn.addEventListener('click', onToggleAutoScan);
+    if (dom.printReceiptBtn) dom.printReceiptBtn.addEventListener('click', onPrintReceipt);
     if (dom.clearCartBtn) dom.clearCartBtn.addEventListener('click', () => {
       cart = {};
+      pendingCounts = {};
+      confirmedProducts = new Set();
       renderCart();
     });
 
@@ -378,6 +428,183 @@
     }
   }
 
+  function onLiveStreamError() {
+    if (!liveMode) return;
+    dom.scanStatus.textContent = 'Lost connection to phone camera.';
+    exitLiveMode();
+  }
+
+  function onToggleAutoScan() {
+    if (!liveMode) {
+      dom.scanStatus.textContent = 'Connect a live camera to use Auto Scan.';
+      return;
+    }
+    autoScanEnabled = !autoScanEnabled;
+    updateAutoScanBtn();
+
+    if (autoScanEnabled) {
+      startAutoScan();
+    } else {
+      stopAutoScan();
+      dom.scanNowBtn.disabled = !liveMode;
+      dom.scanStatus.textContent = 'Auto Scan stopped.';
+    }
+  }
+
+  function updateAutoScanBtn() {
+    if (!dom.autoScanBtn) return;
+    dom.autoScanBtn.textContent = autoScanEnabled ? 'Auto Scan: ON' : 'Auto Scan: OFF';
+    dom.autoScanBtn.setAttribute('aria-pressed', autoScanEnabled ? 'true' : 'false');
+  }
+
+  function startAutoScan() {
+    stopAutoScan();
+    dom.scanNowBtn.disabled = true; // manual scan is redundant while auto scan runs
+    dom.scanStatus.textContent = 'Auto Scan active — watching table for new items...';
+    autoScanTimer = setInterval(runAutoScanCycle, AUTO_SCAN_INTERVAL_MS);
+    runAutoScanCycle(); // run immediately instead of waiting a full interval
+  }
+
+  function stopAutoScan() {
+    if (autoScanTimer) {
+      clearInterval(autoScanTimer);
+      autoScanTimer = null;
+    }
+  }
+
+  async function runAutoScanCycle() {
+    if (!liveMode || !autoScanEnabled || scanInFlight) return;
+    scanInFlight = true;
+    dom.hudInference.textContent = 'AI INFERENCE RUNNING';
+
+    try {
+      const frameRes = await fetch('/capture_frame');
+      if (!frameRes.ok) return; // transient capture hiccup, try again next tick
+
+      const blob = await frameRes.blob();
+      const formData = new FormData();
+      formData.append('image', blob, 'auto_frame.jpg');
+
+      const res = await fetch('/predict', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.error) return;
+
+      processAutoScanDetections(data.products || []);
+    } catch (err) {
+      console.error('Auto scan cycle failed', err);
+    } finally {
+      dom.hudInference.textContent = 'AI INFERENCE IDLE';
+      scanInFlight = false;
+    }
+  }
+
+  function processAutoScanDetections(products) {
+    const seenThisCycle = new Set();
+    const newlyConfirmed = [];
+    let unknownSeen = false;
+
+    const statuses = products.map(p => {
+      if (p.product === 'unknown' || p.confidence < 0.55) {
+        unknownSeen = true;
+        return 'unknown';
+      }
+
+      seenThisCycle.add(p.product);
+
+      if (confirmedProducts.has(p.product)) {
+        return 'confirmed';
+      }
+
+      const count = (pendingCounts[p.product] || 0) + 1;
+      pendingCounts[p.product] = count;
+
+      if (count >= CONFIRM_THRESHOLD) {
+        confirmedProducts.add(p.product);
+        delete pendingCounts[p.product];
+        newlyConfirmed.push(p);
+        return 'confirmed';
+      }
+
+      return 'pending';
+    });
+
+    // Items that dropped out of view reset their pending count, so a
+    // fleeting/false detection doesn't slowly accumulate confirmations.
+    Object.keys(pendingCounts).forEach(pid => {
+      if (!seenThisCycle.has(pid)) delete pendingCounts[pid];
+    });
+
+    lastDetectedProducts = products;
+    renderAutoScanBoxes(products, statuses);
+
+    if (newlyConfirmed.length > 0) {
+      addToCart(newlyConfirmed);
+      dom.scanStatus.textContent = `Auto Scan: added ${newlyConfirmed.length} new item${newlyConfirmed.length === 1 ? '' : 's'} to cart`;
+      playAudioAlert(false);
+    } else if (unknownSeen) {
+      dom.scanStatus.textContent = 'Auto Scan: unrecognized item on table';
+      playAudioAlert(true);
+    } else {
+      dom.scanStatus.textContent = 'Auto Scan active — watching table for new items...';
+    }
+  }
+
+  // Computes how a naturally-sized image maps onto its displayed box,
+  // matching CSS object-fit behavior:
+  //   contain -> scale = min(...), image fully visible, may letterbox
+  //   cover   -> scale = max(...), image fills the box, may crop edges
+  // The same offset formula works for both -- it just goes negative
+  // (image extends past the container, clipped by overflow:hidden) for
+  // cover, and positive (letterbox bars) for contain.
+  function computeBoxTransform(sourceImage, fitMode) {
+    const rect = sourceImage.getBoundingClientRect();
+    const scale = fitMode === 'cover'
+      ? Math.max(rect.width / sourceImage.naturalWidth, rect.height / sourceImage.naturalHeight)
+      : Math.min(rect.width / sourceImage.naturalWidth, rect.height / sourceImage.naturalHeight);
+    const renderedW = sourceImage.naturalWidth * scale;
+    const renderedH = sourceImage.naturalHeight * scale;
+    return {
+      scale,
+      offsetX: (rect.width - renderedW) / 2,
+      offsetY: (rect.height - renderedH) / 2,
+    };
+  }
+
+  function renderAutoScanBoxes(products, statuses) {
+    const sourceImage = dom.liveStreamImage;
+    dom.overlay.innerHTML = '';
+    if (!sourceImage.naturalWidth) return;
+
+    const { scale, offsetX, offsetY } = computeBoxTransform(sourceImage, 'cover');
+
+    products.forEach((p, i) => {
+      const status = statuses[i];
+      const [x1, y1, x2, y2] = p.bbox;
+      const box = document.createElement('div');
+
+      box.className = 'bounding-box ' + (
+        status === 'confirmed' ? 'confirmed-box' :
+        status === 'unknown' ? 'unknown-box' : 'pending-box'
+      );
+      box.style.left = (offsetX + x1 * scale) + 'px';
+      box.style.top = (offsetY + y1 * scale) + 'px';
+      box.style.width = ((x2 - x1) * scale) + 'px';
+      box.style.height = ((y2 - y1) * scale) + 'px';
+
+      const label = document.createElement('div');
+      label.className = 'bbox-label';
+      const confPct = (p.confidence * 100).toFixed(1);
+      label.textContent = status === 'confirmed'
+        ? `#${p.product} • In Cart ✓`
+        : status === 'unknown'
+          ? `Unknown Item • ${confPct}%`
+          : `#${p.product} • Scanning… ${confPct}%`;
+
+      box.appendChild(label);
+      dom.overlay.appendChild(box);
+    });
+  }
+
   async function onDisconnectCamera() {
     try {
       await fetch('/disconnect_camera', { method: 'POST' });
@@ -403,6 +630,7 @@
     dom.changePhotoBtn.style.display = 'none';
     dom.disconnectCameraBtn.style.display = 'inline-flex';
     dom.scanNowBtn.disabled = false;
+    if (dom.autoScanBtn) dom.autoScanBtn.disabled = false;
 
     dom.hudCameraName.textContent = 'Phone Camera (Live)';
     dom.scanStatus.textContent = 'Live feed connected — press Scan to detect items';
@@ -410,6 +638,11 @@
 
   function exitLiveMode() {
     liveMode = false;
+    autoScanEnabled = false;
+    stopAutoScan();
+    updateAutoScanBtn();
+    if (dom.autoScanBtn) dom.autoScanBtn.disabled = true;
+
     dom.liveStreamImage.style.display = 'none';
     dom.liveStreamImage.src = '';
     dom.cameraImage.style.display = 'none';
@@ -542,12 +775,8 @@
     dom.overlay.innerHTML = '';
     if (!sourceImage.naturalWidth) return;
 
-    const rect = sourceImage.getBoundingClientRect();
-    const scale = Math.min(rect.width / sourceImage.naturalWidth, rect.height / sourceImage.naturalHeight);
-    const renderedW = sourceImage.naturalWidth * scale;
-    const renderedH = sourceImage.naturalHeight * scale;
-    const offsetX = (rect.width - renderedW) / 2;
-    const offsetY = (rect.height - renderedH) / 2;
+    const fitMode = sourceImage === dom.liveStreamImage ? 'cover' : 'contain';
+    const { scale, offsetX, offsetY } = computeBoxTransform(sourceImage, fitMode);
 
     let hasUnknownItem = false;
 
@@ -577,6 +806,64 @@
     if (triggerAudio && products.length > 0) {
       playAudioAlert(hasUnknownItem);
     }
+  }
+
+  function onPrintReceipt() {
+    const ids = Object.keys(cart);
+    if (ids.length === 0) {
+      dom.scanStatus.textContent = 'Cart is empty — nothing to print.';
+      return;
+    }
+
+    let totalUnits = 0;
+    const rows = ids.map(id => {
+      const item = cart[id];
+      totalUnits += item.count;
+      const confPct = (item.bestConfidence * 100).toFixed(1);
+      return `
+        <tr>
+          <td>#${id}</td>
+          <td style="text-align:center;">${item.count}</td>
+          <td style="text-align:right;">${confPct}%</td>
+        </tr>`;
+    }).join('');
+
+    const receiptHtml = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Receipt — ScanDesk OS</title>
+<style>
+  body { font-family: 'Courier New', monospace; max-width: 320px; margin: 24px auto; color: #111; }
+  h1 { font-size: 16px; text-align: center; margin-bottom: 0; }
+  .sub { text-align: center; font-size: 11px; color: #555; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+  th, td { padding: 4px 2px; border-bottom: 1px dashed #999; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; color: #555; }
+  .totals { margin-top: 12px; font-size: 13px; display: flex; justify-content: space-between; font-weight: bold; border-top: 1px solid #333; padding-top: 8px; }
+  .note { margin-top: 20px; font-size: 10px; color: #777; text-align: center; }
+</style>
+</head>
+<body>
+  <h1>ScanDesk OS</h1>
+  <div class="sub">${new Date().toLocaleString()}</div>
+  <table>
+    <thead><tr><th>Item</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Best Match</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="totals"><span>Unique items</span><span>${ids.length}</span></div>
+  <div class="totals"><span>Total units</span><span>${totalUnits}</span></div>
+  <div class="note">Online receipt — pricing isn't tracked in the catalog yet.</div>
+</body>
+</html>`;
+
+    const receiptWindow = window.open('', '_blank');
+    if (!receiptWindow) {
+      dom.scanStatus.textContent = 'Could not open receipt — check your popup blocker.';
+      return;
+    }
+    receiptWindow.document.write(receiptHtml);
+    receiptWindow.document.close();
   }
 
   function addToCart(products) {
