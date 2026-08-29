@@ -132,6 +132,48 @@
     font-size: 14px;
   }
 
+  .product-name-input {
+    width: 100%;
+    margin-top: 6px;
+    padding: 5px 8px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: var(--font-sans);
+  }
+
+  .product-price-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .product-price-row span { font-size: 12px; color: var(--text-muted); }
+
+  .product-price-input {
+    flex: 1;
+    padding: 5px 8px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: var(--font-mono);
+  }
+
+  .product-meta-save {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+
+  .product-meta-status {
+    font-size: 10px;
+    margin-top: 4px;
+    min-height: 12px;
+  }
+
+  .product-meta-status.success { color: var(--success); }
+  .product-meta-status.error { color: var(--danger); }
+
   .product-stats {
     margin-top: 8px;
     display: flex;
@@ -359,9 +401,55 @@
             <span>Reference samples: <b>${p.reference_samples}</b></span>
             <span>Embedding dim: <b>${p.embedding_dim}</b></span>
           </div>
+          <input class="form-input product-name-input" data-id="${p.id}" data-field="name"
+            value="${p.name && p.name !== p.id ? p.name : ''}" placeholder="Display name (e.g. Whole Milk 1L)">
+          <div class="product-price-row">
+            <span>$</span>
+            <input class="form-input product-price-input" data-id="${p.id}" data-field="price" type="number" min="0" step="0.01"
+              value="${p.price || ''}" placeholder="0.00">
+            <button class="btn product-meta-save" data-id="${p.id}" type="button">Save</button>
+          </div>
+          <div class="product-meta-status" id="meta-status-${p.id}"></div>
         </div>
       </div>
     `).join('');
+
+    grid.querySelectorAll('.product-meta-save').forEach(btn => {
+      btn.addEventListener('click', () => saveProductMeta(btn.dataset.id));
+    });
+  }
+
+  async function saveProductMeta(productId) {
+    const nameInput = document.querySelector(`.product-name-input[data-id="${productId}"]`);
+    const priceInput = document.querySelector(`.product-price-input[data-id="${productId}"]`);
+    const statusEl = document.getElementById(`meta-status-${productId}`);
+
+    const body = {};
+    if (nameInput.value.trim()) body.name = nameInput.value.trim();
+    if (priceInput.value !== '') body.price = priceInput.value;
+
+    statusEl.textContent = 'Saving...';
+    statusEl.className = 'product-meta-status';
+
+    try {
+      const res = await fetch(`/api/products/${productId}/meta`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        statusEl.textContent = data.error || 'Failed to save.';
+        statusEl.className = 'product-meta-status error';
+        return;
+      }
+      statusEl.textContent = 'Saved — feeds revenue on the dashboard.';
+      statusEl.className = 'product-meta-status success';
+    } catch (err) {
+      statusEl.textContent = 'Network error.';
+      statusEl.className = 'product-meta-status error';
+      console.error(err);
+    }
   }
 
   loadProducts();

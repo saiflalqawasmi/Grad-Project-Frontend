@@ -9,6 +9,7 @@ from PIL import Image
 
 from inference import get_pipeline, FeatureExtractor, VECTORS_DIR, ROTATION_ANGLES
 from stats_tracker import stats, Timer
+import catalog
 from camera_feed import (
     connect_camera, disconnect_camera, generate_frames, get_frame_jpeg, is_connected,
 )
@@ -64,12 +65,17 @@ def connect_camera_route():
         return jsonify({"error": "camera_url is required"}), 400
 
     connected = connect_camera(url)
+    if connected:
+        stats.log_event(f"CAMERA_CONNECT: linked to {url}", level="success")
+    else:
+        stats.log_event(f"CAMERA_CONNECT_FAILED: could not reach {url}", level="danger")
     return jsonify({"connected": connected, "camera_url": url if connected else None})
 
 
 @app.route("/disconnect_camera", methods=["POST"])
 def disconnect_camera_route():
     disconnect_camera()
+    stats.log_event("CAMERA_DISCONNECT: stream closed", level="warning")
     return jsonify({"connected": False})
 
 
@@ -116,12 +122,42 @@ def api_products():
 
         products.append({
             "id": product_id,
+            "name": catalog.get_name(product_id),
+            "price": catalog.get_price(product_id),
             "reference_samples": data.get("num_samples", data["features"].shape[0]),
             "embedding_dim": data["features"].shape[1],
             "image_url": image_url,
         })
 
     return jsonify({"products": products, "count": len(products)})
+
+
+@app.route("/api/products/<product_id>/meta", methods=["POST"])
+def update_product_meta(product_id):
+    """
+    Sets the real-world name/price for a catalog product. This is the only
+    place price data enters the system -- the vision pipeline never
+    produces one -- so it's what makes the dashboard's revenue and
+    forecast-revenue figures real rather than placeholder numbers.
+    """
+    existing_ids = [p.name.replace("_vector.pkl", "") for p in VECTORS_DIR.glob("*.pkl")]
+    if product_id not in existing_ids:
+        return jsonify({"error": f"unknown product id '{product_id}'"}), 404
+
+    payload = request.get_json(silent=True) or request.form
+    name = payload.get("name")
+    price = payload.get("price")
+
+    if price is not None:
+        try:
+            price = float(price)
+            if price < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return jsonify({"error": "price must be a non-negative number"}), 400
+
+    entry = catalog.set_meta(product_id, price=price, name=name)
+    return jsonify({"product_id": product_id, **entry})
 
 @app.route("/api/products/new", methods=["POST"])
 def add_product():
@@ -233,8 +269,14 @@ def predict():
     try:
         with Timer() as t:
             result = get_pipeline().predict(temp_path)
+
+        for p in result["products"]:
+            p["name"] = catalog.get_name(p["product"])
+            p["price"] = catalog.get_price(p["product"])
+
         stats.record(result["products"], t.elapsed_ms)
         result["inference_ms"] = round(t.elapsed_ms, 1)
+        result["transaction_revenue"] = round(sum(p["price"] for p in result["products"]), 2)
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -246,6 +288,15 @@ def predict():
 def get_stats():
     """Aggregated KPIs the dashboard polls to fill in real numbers."""
     return jsonify(stats.snapshot())
+
+
+@app.route("/api/predictions", methods=["GET"])
+def get_predictions():
+    """
+    AI forecast: best-selling items + suggested reorder quantities, derived
+    from live scan volume (see StatsTracker.predictions for the method).
+    """
+    return jsonify(stats.predictions())
 
 
 if __name__ == "__main__":

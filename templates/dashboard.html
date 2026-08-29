@@ -28,6 +28,16 @@
         <div class="kpi-value" id="kpi-scans-today">0</div>
         <div class="kpi-trend trend-neutral" id="kpi-scans-trend">Since page load</div>
       </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Revenue Today</div>
+        <div class="kpi-value" id="kpi-revenue-today">$0.00</div>
+        <div class="kpi-trend trend-neutral" id="kpi-revenue-trend">From priced catalog items</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avg Basket Size</div>
+        <div class="kpi-value" id="kpi-basket-size">--</div>
+        <div class="kpi-trend trend-neutral">Items per scan</div>
+      </div>
     </div>
 
     <!-- Live Camera Viewport Box -->
@@ -62,52 +72,43 @@
     <!-- Last Scan Item Breakdown -->
     <section class="card">
       <div class="card-header">
-        <div class="card-title">Last Scan Results (Transaction #8839)</div>
-        <button class="btn" style="font-size: 11px; padding: 4px 8px;">View Full History</button>
+        <div class="card-title" id="last-scan-title">Last Scan Results</div>
       </div>
 
-      <div class="scan-list">
-        <div class="scan-item">
-          <div class="item-info">
-            <div class="item-thumb">🥛</div>
-            <div>
-              <div class="item-name">Whole Milk 1L</div>
-              <div class="item-meta">SKU: 4011-8832 | Packaged</div>
-            </div>
-          </div>
-          <div class="item-score">
-            <div class="score-value score-high">99.4%</div>
-            <div class="item-meta">Class: High Confidence</div>
-          </div>
-        </div>
+      <div class="scan-list" id="last-scan-list">
+        <div style="text-align: center; color: var(--text-muted); padding: 20px 0; font-size: 13px;">No scans yet — run a scan to see live results here.</div>
+      </div>
+    </section>
 
-        <div class="scan-item">
-          <div class="item-info">
-            <div class="item-thumb">🍎</div>
-            <div>
-              <div class="item-name">Organic Gala Apple</div>
-              <div class="item-meta">SKU: 3110-9921 | Produce (Weight: 180g)</div>
-            </div>
-          </div>
-          <div class="item-score">
-            <div class="score-value score-high">98.7%</div>
-            <div class="item-meta">Class: High Confidence</div>
-          </div>
+    <!-- AI Sales Forecast & Restock Suggestions -->
+    <section class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <span>🤖 AI Sales Forecast &amp; Restock Suggestions</span>
         </div>
+      </div>
 
-        <div class="scan-item">
-          <div class="item-info">
-            <div class="item-thumb">🍞</div>
-            <div>
-              <div class="item-name">Sourdough Artisan Bread</div>
-              <div class="item-meta">SKU: 1002-4412 | Bakery (Unpackaged)</div>
-            </div>
-          </div>
-          <div class="item-score">
-            <div class="score-value score-med">84.1%</div>
-            <div class="item-meta">Class: Attention Required</div>
-          </div>
-        </div>
+      <div id="forecast-highlight-container"></div>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Trend</th>
+            <th>Predicted Demand (7d)</th>
+            <th>Predicted Revenue (7d)</th>
+            <th>Suggested Reorder Qty</th>
+          </tr>
+        </thead>
+        <tbody id="forecast-body">
+          <tr>
+            <td colspan="5" style="text-align: center; color: var(--text-muted);">Gathering scan data...</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="forecast-note">
+        Based on live scan volume (no separate sales feed exists yet) — a simple trend projection over the last 14 days, with a 7-day lead time and 25% safety buffer built into the reorder quantity. Treat as a starting estimate, not a guarantee.
       </div>
     </section>
 
@@ -166,13 +167,19 @@
       </table>
     </section>
 
+    <!-- Smart Alerts -->
+    <section class="card">
+      <div class="card-title" style="margin-bottom: 12px;">Smart Alerts</div>
+      <div class="alert-list" id="alert-list">
+        <div class="alert-item" style="color: var(--text-muted);">No alerts yet — waiting on scan data.</div>
+      </div>
+    </section>
+
     <!-- Telemetry Log -->
     <section class="card">
       <div class="card-title" style="margin-bottom: 8px;">Real-time Telemetry</div>
-      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px;">
-        <div>[14:23:01] MODEL_INFER_OK: Desk #04 (3 items, 112ms)</div>
-        <div>[14:22:45] LIGHT_NORM: Ambient light exposure stable</div>
-        <div>[14:21:10] CAMERA_CHECK: Frame rate stable at 60 FPS</div>
+      <div id="telemetry-log" style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto;">
+        <div>Waiting for activity...</div>
       </div>
     </section>
 
@@ -194,6 +201,59 @@
     if (accuracy >= 90) return 'badge-success';
     if (accuracy >= 80) return 'badge-warning';
     return 'badge-danger';
+  }
+
+  function fmtMoney(value) {
+    return (value === null || value === undefined) ? '$0.00' : '$' + value.toFixed(2);
+  }
+
+  function scoreClass(confidencePct) {
+    if (confidencePct >= 90) return 'score-high';
+    if (confidencePct >= 80) return 'score-med';
+    return 'score-low';
+  }
+
+  function renderLastScan(items) {
+    const list = document.getElementById('last-scan-list');
+    const title = document.getElementById('last-scan-title');
+    if (!items || items.length === 0) {
+      list.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px 0; font-size: 13px;">No scans yet — run a scan to see live results here.</div>';
+      title.textContent = 'Last Scan Results';
+      return;
+    }
+
+    const total = items.reduce((sum, i) => sum + (i.price || 0), 0);
+    title.textContent = `Last Scan Results (${items.length} item${items.length === 1 ? '' : 's'}, ${fmtMoney(total)})`;
+
+    list.innerHTML = items.map(item => {
+      const confPct = item.confidence * 100;
+      return `
+        <div class="scan-item">
+          <div class="item-info">
+            <img class="item-thumb" src="${item.image_url}" alt="${item.name}"
+              style="object-fit: cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';">
+            <div class="item-thumb" style="display: none;">📦</div>
+            <div>
+              <div class="item-name">${item.name}</div>
+              <div class="item-meta">ID: ${item.product_id}${item.price ? ' | ' + fmtMoney(item.price) : ' | Price not set'}</div>
+            </div>
+          </div>
+          <div class="item-score">
+            <div class="score-value ${scoreClass(confPct)}">${confPct.toFixed(1)}%</div>
+            <div class="item-meta">${confPct >= 90 ? 'High Confidence' : confPct >= 80 ? 'Medium Confidence' : 'Attention Required'}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderTelemetry(events) {
+    const log = document.getElementById('telemetry-log');
+    if (!events || events.length === 0) {
+      log.innerHTML = '<div>Waiting for activity...</div>';
+      return;
+    }
+    log.innerHTML = events.map(e => `<div>[${e.time}] ${e.message}</div>`).join('');
   }
 
   function renderProductTable(products) {
@@ -221,6 +281,9 @@
       return;
     }
 
+    _lastStats = data;
+    if (_lastPred) renderAlerts(_lastPred, _lastStats);
+
     document.getElementById('kpi-overall-accuracy').textContent = fmtPct(data.overall_accuracy);
     document.getElementById('kpi-overall-accuracy-trend').textContent =
       data.has_data ? `Based on ${data.scans_today} scan${data.scans_today === 1 ? '' : 's'}` : 'Awaiting scans';
@@ -232,6 +295,10 @@
     document.getElementById('kpi-inference-speed').textContent = fmtMs(data.inference_speed_ms);
     document.getElementById('kpi-scans-today').textContent = data.scans_today.toLocaleString();
 
+    document.getElementById('kpi-revenue-today').textContent = fmtMoney(data.revenue_today);
+    document.getElementById('kpi-basket-size').textContent =
+      (data.avg_basket_size === null || data.avg_basket_size === undefined) ? '--' : data.avg_basket_size;
+
     document.getElementById('gauge-accuracy-value').textContent = fmtPct(data.overall_accuracy);
     document.getElementById('accuracy-progress-fill').style.width =
       (data.overall_accuracy || 0) + '%';
@@ -240,9 +307,126 @@
     document.getElementById('stat-low-confidence').textContent = fmtPct(data.low_confidence_pct);
 
     renderProductTable(data.products);
+    renderLastScan(data.last_scan_items);
+    renderTelemetry(data.events);
+  }
+
+  function trendBadgeClass(trend) {
+    if (trend === 'rising') return 'badge-success';
+    if (trend === 'falling') return 'badge-danger';
+    return 'badge-neutral';
+  }
+
+  function trendLabel(trend) {
+    if (trend === 'rising') return '▲ Rising';
+    if (trend === 'falling') return '▼ Falling';
+    return '● Steady';
+  }
+
+  function renderForecastHighlight(pred) {
+    const container = document.getElementById('forecast-highlight-container');
+    if (!pred.has_data || !pred.top_seller) {
+      container.innerHTML = '';
+      return;
+    }
+    const top = pred.items[0];
+    const revenueText = top.predicted_revenue ? `, ~${fmtMoney(top.predicted_revenue)} predicted revenue` : '';
+    container.innerHTML = `
+      <div class="forecast-highlight">
+        <div class="forecast-highlight-icon">🏆</div>
+        <div>
+          <div class="forecast-highlight-label">Best-selling item (last ${pred.window_days} days)</div>
+          <div class="forecast-highlight-value">${top.name} — ${top.scans_recent} scans, ~${top.predicted_demand} predicted over next ${pred.forecast_days} days${revenueText}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderForecastTable(pred) {
+    const body = document.getElementById('forecast-body');
+    if (!pred.has_data || !pred.items || pred.items.length === 0) {
+      body.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Gathering scan data...</td></tr>';
+      return;
+    }
+    body.innerHTML = pred.items.map(item => `
+      <tr>
+        <td>${item.name}</td>
+        <td><span class="badge ${trendBadgeClass(item.trend)}">${trendLabel(item.trend)}</span></td>
+        <td>${item.predicted_demand}</td>
+        <td>${item.predicted_revenue ? fmtMoney(item.predicted_revenue) : '<span style="color: var(--text-subtle);">Set price</span>'}</td>
+        <td style="font-weight: 700;">${item.suggested_reorder_qty}</td>
+      </tr>
+    `).join('');
+  }
+
+  function renderAlerts(pred, stats) {
+    const list = document.getElementById('alert-list');
+    const alerts = [];
+
+    if (pred.has_data) {
+      pred.items.forEach(item => {
+        if (item.trend === 'rising') {
+          alerts.push({
+            level: 'success',
+            icon: '📈',
+            text: `${item.name} is trending up — consider stocking ${item.suggested_reorder_qty} units.`
+          });
+        } else if (item.trend === 'falling') {
+          alerts.push({
+            level: 'warning',
+            icon: '📉',
+            text: `${item.name} demand is dropping — consider a smaller next order.`
+          });
+        }
+      });
+    }
+
+    if (stats && stats.products) {
+      stats.products.forEach(p => {
+        if (p.accuracy !== null && p.accuracy !== undefined && p.accuracy < 80) {
+          alerts.push({
+            level: 'danger',
+            icon: '⚠️',
+            text: `${p.name} has low detection confidence (${p.accuracy.toFixed(1)}%) — may need more training images.`
+          });
+        }
+      });
+    }
+
+    if (alerts.length === 0) {
+      list.innerHTML = '<div class="alert-item" style="color: var(--text-muted);">No alerts right now — everything looks steady.</div>';
+      return;
+    }
+
+    list.innerHTML = alerts.slice(0, 6).map(a => `
+      <div class="alert-item alert-${a.level}">
+        <span class="alert-icon">${a.icon}</span>
+        <span>${a.text}</span>
+      </div>
+    `).join('');
+  }
+
+  let _lastStats = null;
+  let _lastPred = null;
+
+  async function refreshPredictions() {
+    let pred;
+    try {
+      const res = await fetch('/api/predictions');
+      pred = await res.json();
+    } catch (err) {
+      console.error('Failed to load /api/predictions', err);
+      return;
+    }
+    _lastPred = pred;
+    renderForecastHighlight(pred);
+    renderForecastTable(pred);
+    renderAlerts(pred, _lastStats);
   }
 
   refreshStats();
+  refreshPredictions();
   setInterval(refreshStats, 5000);
+  setInterval(refreshPredictions, 10000);
 </script>
 {% endblock %}
