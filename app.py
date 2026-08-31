@@ -4,19 +4,25 @@ import uuid
 from pathlib import Path
 
 import numpy as np
-from flask import Flask, render_template, request, jsonify, Response
+from flask import Flask, render_template, request, jsonify, Response, redirect, url_for, flash
+from flask_login import login_user, logout_user, login_required, current_user
 from PIL import Image
 
 from inference import get_pipeline, FeatureExtractor, VECTORS_DIR, ROTATION_ANGLES
 from stats_tracker import stats, Timer
 import catalog
 import db
+import auth
+from auth import admin_required, manager_or_admin_required
 from camera_feed import (
     connect_camera, disconnect_camera, generate_frames, get_frame_jpeg, is_connected,
 )
 
 app = Flask(__name__)
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-secret-key")
 db.init_db()
+auth.init_db()
+auth.login_manager.init_app(app)
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -38,22 +44,119 @@ def get_extractor():
     return _extractor
 
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(current_user.home_url())
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+
+        if not username or not password:
+            flash("Username and password are required.", "danger")
+            return render_template("login.html")
+
+        user = auth.get_user_by_username(username)
+        if user is None or not user.check_password(password):
+            flash("Invalid username or password.", "danger")
+            return render_template("login.html")
+
+        login_user(user)
+        next_url = request.args.get("next")
+        return redirect(next_url or user.home_url())
+
+    return render_template("login.html")
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for("login"))
+
+
+@app.route("/admin")
+@admin_required
+def admin():
+    return render_template("admin.html", users=auth.list_users())
+
+
+@app.route("/admin/users/create", methods=["POST"])
+@admin_required
+def create_user():
+    username = request.form.get("username", "").strip()
+    email = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "")
+    role = request.form.get("role", "cashier")
+
+    if not username or not email or not password:
+        flash("All fields are required.", "danger")
+        return redirect(url_for("admin"))
+
+    if role not in auth.ROLES:
+        flash("Invalid role.", "danger")
+        return redirect(url_for("admin"))
+
+    if auth.find_conflict(username, email):
+        flash("Username or email already exists.", "danger")
+        return redirect(url_for("admin"))
+
+    auth.create_user(username, email, password, role)
+    flash(f'User "{username}" created successfully.', "success")
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/users/<int:user_id>/role", methods=["POST"])
+@admin_required
+def change_user_role(user_id):
+    user = auth.get_user_by_id(user_id)
+    if user is None:
+        return jsonify({"error": "User not found"}), 404
+    if user.id == current_user.id:
+        return jsonify({"error": "You cannot change your own role"}), 400
+
+    new_role = (request.get_json(silent=True) or {}).get("role")
+    if new_role not in auth.ROLES:
+        return jsonify({"error": "Invalid role"}), 400
+
+    auth.update_role(user.id, new_role)
+    return jsonify({"success": True, "user_id": user.id, "role": new_role})
+
+
+@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+@admin_required
+def delete_user_route(user_id):
+    user = auth.get_user_by_id(user_id)
+    if user is None:
+        return jsonify({"error": "User not found"}), 404
+    if user.id == current_user.id:
+        return jsonify({"error": "You cannot delete yourself"}), 400
+
+    auth.delete_user(user.id)
+    return jsonify({"success": True, "message": "User deleted successfully"})
+
+
 @app.route("/")
+@manager_or_admin_required
 def dashboard():
     return render_template('dashboard.html', camera_connected=is_connected())
 
 
 @app.route("/products")
+@manager_or_admin_required
 def products_page():
     return render_template('products.html')
 
 
 @app.route("/livecart")
+@login_required
 def livecart_page():
     return render_template('livecart.html', camera_connected=is_connected())
 
 
 @app.route("/connect_camera", methods=["POST"])
+@login_required
 def connect_camera_route():
     """
     Connects to a phone acting as an IP camera (e.g. the 'IP Webcam' Android
@@ -75,6 +178,7 @@ def connect_camera_route():
 
 
 @app.route("/disconnect_camera", methods=["POST"])
+@login_required
 def disconnect_camera_route():
     disconnect_camera()
     stats.log_event("CAMERA_DISCONNECT: stream closed", level="warning")
@@ -82,6 +186,7 @@ def disconnect_camera_route():
 
 
 @app.route("/video_feed")
+@login_required
 def video_feed():
     if not is_connected():
         return jsonify({"error": "no camera connected"}), 400
@@ -92,6 +197,7 @@ def video_feed():
 
 
 @app.route("/api/products")
+@manager_or_admin_required
 def api_products():
     """
     Reads the real catalog straight out of vectors/*.pkl -- no hardcoded
@@ -135,6 +241,7 @@ def api_products():
 
 
 @app.route("/api/products/<product_id>/meta", methods=["POST"])
+@manager_or_admin_required
 def update_product_meta(product_id):
     """
     Sets the real-world name/price for a catalog product. This is the only
@@ -162,6 +269,7 @@ def update_product_meta(product_id):
     return jsonify({"product_id": product_id, **entry})
 
 @app.route("/api/products/new", methods=["POST"])
+@admin_required
 def add_product():
     """
     Builds a real catalog entry from uploaded photos: runs each image
@@ -231,6 +339,7 @@ def add_product():
 
 
 @app.route("/capture_frame")
+@login_required
 def capture_frame():
     """
     Grabs a single current frame from the connected phone camera as a JPEG.
@@ -250,6 +359,7 @@ def capture_frame():
 
 
 @app.route("/predict", methods=["POST"])
+@login_required
 def predict():
     """
     Accepts a multipart/form-data upload under the field name 'image',
@@ -287,12 +397,14 @@ def predict():
 
 
 @app.route("/stats", methods=["GET"])
+@manager_or_admin_required
 def get_stats():
     """Aggregated KPIs the dashboard polls to fill in real numbers."""
     return jsonify(stats.snapshot())
 
 
 @app.route("/api/predictions", methods=["GET"])
+@manager_or_admin_required
 def get_predictions():
     """
     AI forecast: best-selling items + suggested reorder quantities, derived
@@ -302,12 +414,14 @@ def get_predictions():
 
 
 @app.route("/api/timeseries", methods=["GET"])
+@manager_or_admin_required
 def get_timeseries():
     """Real hourly/daily scan+revenue+confidence series for the dashboard's trend charts."""
     return jsonify(stats.timeseries())
 
 
 @app.route("/api/checkout", methods=["POST"])
+@login_required
 def checkout():
     """
     Finalizes the current Live Cart into a real, persisted transaction row.
@@ -348,6 +462,7 @@ def checkout():
 
 
 @app.route("/api/transactions", methods=["GET"])
+@manager_or_admin_required
 def get_transactions():
     """Recent completed transactions, most recent first."""
     limit = request.args.get("limit", default=50, type=int)

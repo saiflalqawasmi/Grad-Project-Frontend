@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+
+{% set active_page = "admin" %}
+
+{% block title %}Admin - ScanDesk OS{% endblock %}
+
+{% block styles %}
+<style>
+  .admin-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 28px 24px 48px;
+  }
+
+  .admin-hero {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .admin-hero h1 { font-size: 24px; margin-bottom: 4px; letter-spacing: -0.01em; }
+  .admin-hero p { color: var(--text-muted); font-size: 13px; }
+
+  .admin-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 700px) {
+    .admin-kpi-grid { grid-template-columns: 1fr; }
+  }
+
+  .admin-kpi {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .admin-kpi-icon {
+    width: 40px; height: 40px;
+    border-radius: var(--radius-md);
+    display: grid; place-items: center;
+    font-size: 17px;
+    flex-shrink: 0;
+  }
+  .admin-kpi-icon.i-total { background: var(--primary-light); }
+  .admin-kpi-icon.i-admin { background: var(--danger-bg); }
+  .admin-kpi-icon.i-manager { background: var(--warning-bg); }
+
+  .admin-layout {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .admin-layout { grid-template-columns: 1fr; }
+  }
+
+  .create-form { display: grid; gap: 12px; }
+  .create-form label { font-size: 12px; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 4px; }
+  .create-form input, .create-form select {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-family: var(--font-sans);
+    background: var(--surface);
+  }
+  .create-form input:focus, .create-form select:focus {
+    outline: none;
+    border-color: var(--primary);
+  }
+  .create-form .btn-primary { justify-content: center; margin-top: 4px; }
+
+  .flash-stack { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+  .flash-item {
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .flash-success { background: var(--success-bg); color: var(--success); }
+  .flash-danger { background: var(--danger-bg); color: var(--danger); }
+
+  .user-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .user-row:last-child { border-bottom: none; }
+
+  .user-avatar {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+    color: #fff;
+  }
+  .user-avatar.role-admin { background: #dc2626; }
+  .user-avatar.role-manager { background: #d97706; }
+  .user-avatar.role-cashier { background: #64748b; }
+
+  .user-identity { flex: 1; min-width: 0; }
+  .user-identity .name { font-weight: 600; font-size: 13px; }
+  .user-identity .email { color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .role-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .role-pill.role-admin { background: var(--danger-bg); color: var(--danger); }
+  .role-pill.role-manager { background: var(--warning-bg); color: var(--warning); }
+  .role-pill.role-cashier { background: var(--bg-main); color: var(--text-muted); }
+
+  .user-actions { display: flex; align-items: center; gap: 8px; }
+  .user-actions select {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    background: var(--surface);
+  }
+  .btn-delete {
+    color: var(--danger);
+    border-color: rgba(220, 38, 38, 0.25);
+    background: var(--danger-bg);
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  .btn-delete:hover { background: var(--danger); color: #fff; }
+
+  .self-tag { font-size: 11px; color: var(--text-subtle); padding: 6px 4px; }
+
+  .empty-state {
+    text-align: center;
+    padding: 32px 0;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+
+  <div class="admin-hero">
+    <div>
+      <h1>Admin Dashboard</h1>
+      <p>Manage ScanDesk OS accounts and page-level access.</p>
+    </div>
+    <span class="badge badge-danger">ADMIN</span>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-stack">
+        {% for category, message in messages %}
+          <div class="flash-item flash-{{ 'success' if category == 'success' else 'danger' }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="admin-kpi-grid">
+    <div class="kpi-card admin-kpi">
+      <div class="admin-kpi-icon i-total">👥</div>
+      <div>
+        <div class="kpi-label">Total Users</div>
+        <div class="kpi-value">{{ users|length }}</div>
+      </div>
+    </div>
+    <div class="kpi-card admin-kpi">
+      <div class="admin-kpi-icon i-admin">🛡️</div>
+      <div>
+        <div class="kpi-label">Admins</div>
+        <div class="kpi-value">{{ users|selectattr("role", "equalto", "admin")|list|length }}</div>
+      </div>
+    </div>
+    <div class="kpi-card admin-kpi">
+      <div class="admin-kpi-icon i-manager">📊</div>
+      <div>
+        <div class="kpi-label">Managers</div>
+        <div class="kpi-value">{{ users|selectattr("role", "equalto", "manager")|list|length }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="admin-layout">
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">➕ Create User</div>
+      </div>
+
+      <form class="create-form" action="{{ url_for('create_user') }}" method="POST">
+        <div>
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" required>
+        </div>
+        <div>
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" required>
+        </div>
+        <div>
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required>
+        </div>
+        <div>
+          <label for="role">Role</label>
+          <select id="role" name="role">
+            <option value="cashier">Cashier — Live Cart only</option>
+            <option value="manager">Manager — Dashboard + Products</option>
+            <option value="admin">Admin — Full access</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Create User</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Users ({{ users|length }})</div>
+      </div>
+
+      {% if users %}
+        {% for user in users %}
+        <div class="user-row">
+          <div class="user-avatar role-{{ user.role }}">{{ user.username[:2]|upper }}</div>
+          <div class="user-identity">
+            <div class="name">{{ user.username }}</div>
+            <div class="email">{{ user.email }}</div>
+          </div>
+          <span class="role-pill role-{{ user.role }}">{{ user.role }}</span>
+
+          {% if user.id != current_user.id %}
+          <div class="user-actions">
+            <select onchange="changeRole({{ user.id }}, this.value)">
+              <option value="cashier" {% if user.role == "cashier" %}selected{% endif %}>Cashier</option>
+              <option value="manager" {% if user.role == "manager" %}selected{% endif %}>Manager</option>
+              <option value="admin" {% if user.role == "admin" %}selected{% endif %}>Admin</option>
+            </select>
+            <button class="btn btn-delete" onclick="deleteUser({{ user.id }}, '{{ user.username }}')">Delete</button>
+          </div>
+          {% else %}
+          <div class="self-tag">This is you</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state">No users found.</div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+
+<script>
+async function changeRole(userId, role) {
+  const response = await fetch(`/admin/users/${userId}/role`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    alert(data.error || "Failed to change role");
+  }
+  location.reload();
+}
+
+async function deleteUser(userId, username) {
+  if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
+
+  const response = await fetch(`/admin/users/${userId}/delete`, { method: "POST" });
+  const data = await response.json();
+  if (!response.ok) {
+    alert(data.error || "Failed to delete user");
+    return;
+  }
+  location.reload();
+}
+</script>
+{% endblock %}

@@ -1,4 +1,5 @@
 flask>=3.0
+flask-login>=0.6
 requests>=2.31
 ultralytics>=8.3
 torch>=2.2

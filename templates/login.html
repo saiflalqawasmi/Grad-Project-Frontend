@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Login - ScanDesk OS{% endblock %}
+
+{% block styles %}
+<style>
+  .login-shell {
+    min-height: calc(100vh - 64px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+    background:
+      radial-gradient(circle at 15% 15%, var(--primary-light) 0%, transparent 45%),
+      var(--bg-main);
+  }
+
+  .login-card {
+    width: 100%;
+    max-width: 400px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    box-shadow: var(--shadow-md);
+  }
+
+  .login-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    background: var(--primary);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    margin: 0 auto 16px;
+  }
+
+  .login-header { text-align: center; margin-bottom: 24px; }
+  .login-header h1 { font-size: 20px; margin-bottom: 4px; }
+  .login-header p { color: var(--text-muted); font-size: 13px; }
+
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .field input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-family: var(--font-sans);
+    transition: border-color 0.15s ease;
+  }
+  .field input:focus {
+    outline: none;
+    border-color: var(--primary);
+  }
+
+  .flash {
+    padding: 10px 12px;
+    margin-bottom: 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .flash-success { background: var(--success-bg); color: var(--success); }
+  .flash-danger { background: var(--danger-bg); color: var(--danger); }
+
+  .login-submit { width: 100%; justify-content: center; padding: 10px 14px; font-size: 14px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-shell">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="login-icon">AI</div>
+      <h1>Welcome back</h1>
+      <p>Sign in to ScanDesk OS</p>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash flash-{{ 'success' if category == 'success' else 'danger' }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST">
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" required>
+      </div>
+
+      <button type="submit" class="btn btn-primary login-submit">Login</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

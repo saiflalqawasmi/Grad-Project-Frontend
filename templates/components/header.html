@@ -1,22 +1,65 @@
 <header class="header">
-    <div class="brand">
+    <a href="{{ url_for('login') if not current_user.is_authenticated else current_user.home_url() }}" class="brand" style="text-decoration:none; color:inherit;">
         <div class="brand-icon">AI</div>
         <div>
             <div class="brand-title">ScanDesk OS</div>
             <div class="brand-subtitle">Automated Checkout Monitoring</div>
         </div>
-    </div>
+    </a>
 
     <div class="header-actions">
+        {% if current_user.is_authenticated %}
         <nav style="display: flex; gap: 4px; margin-right: 12px;">
-            <a href="/products" class="nav-link {% if active_page == 'products' %}active{% endif %}">Branches</a>
+            {% if current_user.role in ['admin', 'manager'] %}
             <a href="/" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">Dashboard</a>
+            <a href="/products" class="nav-link {% if active_page == 'products' %}active{% endif %}">Products</a>
+            {% endif %}
             <a href="/livecart" class="nav-link {% if active_page == 'livecart' %}active{% endif %}">Live Cart</a>
-            <a href="/products" class="nav-link {% if active_page == 'products' %}active{% endif %}">All Products</a>
+            {% if current_user.is_admin() %}
+            <a href="/admin" class="nav-link {% if active_page == 'admin' %}active{% endif %}">Admin</a>
+            {% endif %}
         </nav>
+
+        <div class="account-menu">
+            <div class="account-avatar">{{ current_user.username[:2]|upper }}</div>
+            <div class="account-info">
+                <div class="account-name">{{ current_user.username }}</div>
+                <div class="account-role">{{ current_user.role }}</div>
+            </div>
+            <a href="{{ url_for('logout') }}" class="nav-link" title="Log out">Log out</a>
+        </div>
+        {% else %}
+        <a href="{{ url_for('login') }}" class="btn btn-primary">Login</a>
+        {% endif %}
+
         <div class="system-badge">
             <span class="status-dot"></span>
             DESK #04 : ONLINE
         </div>
     </div>
 </header>
+
+<style>
+    .account-menu {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-left: 12px;
+        border-left: 1px solid var(--border);
+    }
+    .account-avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: var(--primary-light);
+        color: var(--primary);
+        font-size: 11px;
+        font-weight: 700;
+        display: grid;
+        place-items: center;
+        font-family: var(--font-mono);
+    }
+    .account-info { line-height: 1.25; }
+    .account-name { font-size: 12px; font-weight: 600; }
+    .account-role { font-size: 10px; color: var(--text-muted); text-transform: capitalize; }
+</style>

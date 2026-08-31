@@ -237,11 +237,15 @@
       <div id="box-overlay"></div>
 
       <div id="camera-placeholder" class="camera-placeholder" {% if camera_connected %}style="display:none;"{% endif %}>
-        <div style="margin-bottom: 10px; color: var(--text-subtle); font-size: 13px;">Upload a desk photo, or connect your phone as a live camera</div>
+        <div style="margin-bottom: 10px; color: var(--text-subtle); font-size: 13px;">
+          {% if current_user.role == 'cashier' %}Connect your phone as a live camera to begin scanning{% else %}Upload a desk photo, or connect your phone as a live camera{% endif %}
+        </div>
+        {% if current_user.role != 'cashier' %}
         <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
           <button id="upload-photo-btn" class="btn btn-primary">Upload Photo</button>
           <input type="file" id="photo-input" accept="image/*" style="display:none">
         </div>
+        {% endif %}
         <form id="connect-camera-form" style="display:flex; gap:8px; margin-top:10px; align-items:center; justify-content:center;">
           <input type="text" id="camera-url-input" name="camera_url"
                  placeholder="http://192.168.x.x:8080/video"
@@ -258,7 +262,9 @@
     </div>
 
     <div class="camera-controls">
+      {% if current_user.role != 'cashier' %}
       <button id="change-photo-btn" class="btn" {% if camera_connected %}style="display:none;"{% endif %} disabled>Change Photo</button>
+      {% endif %}
       <button id="disconnect-camera-btn" class="btn" {% if not camera_connected %}style="display:none;"{% endif %}>Disconnect Camera</button>
       <button id="scan-now-btn" class="btn btn-primary" {% if not camera_connected %}disabled{% endif %}>Scan</button>
       <button id="auto-scan-btn" class="btn" aria-pressed="false" {% if not camera_connected %}disabled{% endif %}>Auto Scan: OFF</button>
