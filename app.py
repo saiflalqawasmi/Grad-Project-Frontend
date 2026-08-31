@@ -10,11 +10,13 @@ from PIL import Image
 from inference import get_pipeline, FeatureExtractor, VECTORS_DIR, ROTATION_ANGLES
 from stats_tracker import stats, Timer
 import catalog
+import db
 from camera_feed import (
     connect_camera, disconnect_camera, generate_frames, get_frame_jpeg, is_connected,
 )
 
 app = Flask(__name__)
+db.init_db()
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -297,6 +299,59 @@ def get_predictions():
     from live scan volume (see StatsTracker.predictions for the method).
     """
     return jsonify(stats.predictions())
+
+
+@app.route("/api/timeseries", methods=["GET"])
+def get_timeseries():
+    """Real hourly/daily scan+revenue+confidence series for the dashboard's trend charts."""
+    return jsonify(stats.timeseries())
+
+
+@app.route("/api/checkout", methods=["POST"])
+def checkout():
+    """
+    Finalizes the current Live Cart into a real, persisted transaction row.
+    Prices are always looked up server-side from the catalog -- a client
+    could send any price it wants in the request body, so one from the
+    client is never trusted; only product_id + quantity are read from it.
+    """
+    payload = request.get_json(silent=True) or {}
+    cart_items = payload.get("items") or []
+
+    known_ids = {p.name.replace("_vector.pkl", "") for p in VECTORS_DIR.glob("*.pkl")}
+
+    priced_items = []
+    for entry in cart_items:
+        product_id = str(entry.get("product_id", "")).strip()
+        try:
+            quantity = int(entry.get("quantity", 0))
+        except (TypeError, ValueError):
+            quantity = 0
+        if not product_id or quantity <= 0 or product_id not in known_ids:
+            continue
+        priced_items.append({
+            "product_id": product_id,
+            "product_name": catalog.get_name(product_id),
+            "unit_price": catalog.get_price(product_id),
+            "quantity": quantity,
+        })
+
+    if not priced_items:
+        return jsonify({"error": "no valid items in cart"}), 400
+
+    txn = db.create_transaction(priced_items)
+    stats.log_event(
+        f"CHECKOUT_OK: transaction #{txn['id']}, {txn['item_count']} item(s), ${txn['total']:.2f}",
+        level="success",
+    )
+    return jsonify(txn)
+
+
+@app.route("/api/transactions", methods=["GET"])
+def get_transactions():
+    """Recent completed transactions, most recent first."""
+    limit = request.args.get("limit", default=50, type=int)
+    return jsonify({"transactions": db.list_transactions(limit=limit)})
 
 
 if __name__ == "__main__":

@@ -273,8 +273,10 @@
         <div class="cart-summary">
           <span>Unique items: <b id="cart-unique-count">0</b></span>
           <span>Total units: <b id="cart-total-count">0</b></span>
+          <span>Total: <b id="cart-total-price">$0.00</b></span>
         </div>
         <button id="print-receipt-btn" class="btn">🧾 Print Receipt</button>
+        <button id="pay-btn" class="btn btn-primary" disabled>💳 Pay</button>
       </div>
     </div>
 
@@ -324,6 +326,7 @@
       hudInference: document.getElementById('hud-inference-status'),
       hudCameraName: document.getElementById('hud-camera-name'),
       printReceiptBtn: document.getElementById('print-receipt-btn'),
+      payBtn: document.getElementById('pay-btn'),
       viewport: document.getElementById('viewport')
     };
 
@@ -335,6 +338,7 @@
     if (dom.scanNowBtn) dom.scanNowBtn.addEventListener('click', scanNow);
     if (dom.autoScanBtn) dom.autoScanBtn.addEventListener('click', onToggleAutoScan);
     if (dom.printReceiptBtn) dom.printReceiptBtn.addEventListener('click', onPrintReceipt);
+    if (dom.payBtn) dom.payBtn.addEventListener('click', onPay);
     if (dom.clearCartBtn) dom.clearCartBtn.addEventListener('click', () => {
       cart = {};
       pendingCounts = {};
@@ -816,15 +820,22 @@
     }
 
     let totalUnits = 0;
+    let totalPrice = 0;
     const rows = ids.map(id => {
       const item = cart[id];
+      const catalogEntry = productCatalog[id];
+      const price = (catalogEntry && catalogEntry.price) || 0;
+      const name = (catalogEntry && catalogEntry.name && catalogEntry.name !== id) ? catalogEntry.name : `#${id}`;
+      const lineTotal = price * item.count;
       totalUnits += item.count;
+      totalPrice += lineTotal;
       const confPct = (item.bestConfidence * 100).toFixed(1);
       return `
         <tr>
-          <td>#${id}</td>
+          <td>${name}</td>
           <td style="text-align:center;">${item.count}</td>
-          <td style="text-align:right;">${confPct}%</td>
+          <td style="text-align:right;">${fmtMoney(price)}</td>
+          <td style="text-align:right;">${fmtMoney(lineTotal)}</td>
         </tr>`;
     }).join('');
 
@@ -832,28 +843,27 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Receipt — ScanDesk OS</title>
+<title>Receipt Preview — ScanDesk OS</title>
 <style>
-  body { font-family: 'Courier New', monospace; max-width: 320px; margin: 24px auto; color: #111; }
+  body { font-family: 'Courier New', monospace; max-width: 340px; margin: 24px auto; color: #111; }
   h1 { font-size: 16px; text-align: center; margin-bottom: 0; }
   .sub { text-align: center; font-size: 11px; color: #555; margin-top: 4px; }
   table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
   th, td { padding: 4px 2px; border-bottom: 1px dashed #999; }
   th { text-align: left; font-size: 11px; text-transform: uppercase; color: #555; }
-  .totals { margin-top: 12px; font-size: 13px; display: flex; justify-content: space-between; font-weight: bold; border-top: 1px solid #333; padding-top: 8px; }
+  .totals { margin-top: 12px; font-size: 15px; display: flex; justify-content: space-between; font-weight: bold; border-top: 1px solid #333; padding-top: 8px; }
   .note { margin-top: 20px; font-size: 10px; color: #777; text-align: center; }
 </style>
 </head>
 <body>
   <h1>ScanDesk OS</h1>
-  <div class="sub">${new Date().toLocaleString()}</div>
+  <div class="sub">Preview · ${new Date().toLocaleString()}</div>
   <table>
-    <thead><tr><th>Item</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Best Match</th></tr></thead>
+    <thead><tr><th>Item</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Price</th><th style="text-align:right;">Total</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
-  <div class="totals"><span>Unique items</span><span>${ids.length}</span></div>
-  <div class="totals"><span>Total units</span><span>${totalUnits}</span></div>
-  <div class="note">Online receipt — pricing isn't tracked in the catalog yet.</div>
+  <div class="totals"><span>Total</span><span>${fmtMoney(totalPrice)}</span></div>
+  <div class="note">Preview only — press Pay in Live Cart to complete the transaction.</div>
 </body>
 </html>`;
 
@@ -884,10 +894,19 @@
     const ids = Object.keys(cart);
 
     let totalUnits = 0;
-    ids.forEach(id => totalUnits += cart[id].count);
+    let totalPrice = 0;
+    ids.forEach(id => {
+      totalUnits += cart[id].count;
+      const catalogEntry = productCatalog[id];
+      const price = (catalogEntry && catalogEntry.price) || 0;
+      totalPrice += price * cart[id].count;
+    });
 
     document.getElementById('cart-unique-count').textContent = ids.length;
     document.getElementById('cart-total-count').textContent = totalUnits;
+    document.getElementById('cart-total-price').textContent = fmtMoney(totalPrice);
+
+    if (dom.payBtn) dom.payBtn.disabled = ids.length === 0;
 
     if (ids.length === 0) {
       grid.innerHTML = '';
@@ -900,6 +919,8 @@
       const item = cart[id];
       const catalogEntry = productCatalog[id];
       const imageUrl = catalogEntry && catalogEntry.image_url;
+      const price = (catalogEntry && catalogEntry.price) || 0;
+      const name = (catalogEntry && catalogEntry.name && catalogEntry.name !== id) ? catalogEntry.name : `Product #${id}`;
       const confPct = (item.bestConfidence * 100).toFixed(1);
 
       return `
@@ -909,13 +930,101 @@
             : `<div class="cart-thumb-placeholder">#${id}</div>`
           }
           <div class="cart-item-body">
-            <div class="cart-item-name">Product #${id}</div>
-            <div class="cart-item-meta">Best match: ${confPct}%</div>
+            <div class="cart-item-name">${name}</div>
+            <div class="cart-item-meta">Best match: ${confPct}%${price ? ' · ' + fmtMoney(price) + ' ea' : ' · price not set'}</div>
           </div>
           <div class="cart-item-qty">×${item.count}</div>
         </div>
       `;
     }).join('');
+  }
+
+  function fmtMoney(value) {
+    return '$' + (value || 0).toFixed(2);
+  }
+
+  async function onPay() {
+    const ids = Object.keys(cart);
+    if (ids.length === 0) {
+      dom.scanStatus.textContent = 'Cart is empty — nothing to pay.';
+      return;
+    }
+
+    const items = ids.map(id => ({ product_id: id, quantity: cart[id].count }));
+
+    dom.payBtn.disabled = true;
+    dom.payBtn.textContent = 'Processing...';
+
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        dom.scanStatus.textContent = 'Payment failed: ' + (data.error || 'unknown error');
+        return;
+      }
+
+      dom.scanStatus.textContent = `Paid — Transaction #${data.id}, ${fmtMoney(data.total)}`;
+      renderPaidReceipt(data);
+
+      cart = {};
+      pendingCounts = {};
+      confirmedProducts = new Set();
+      renderCart();
+    } catch (err) {
+      dom.scanStatus.textContent = 'Payment failed — network error.';
+      console.error(err);
+    } finally {
+      dom.payBtn.textContent = '💳 Pay';
+      dom.payBtn.disabled = Object.keys(cart).length === 0;
+    }
+  }
+
+  function renderPaidReceipt(txn) {
+    const rows = txn.items.map(i => `
+      <tr>
+        <td>${i.product_name}</td>
+        <td style="text-align:center;">${i.quantity}</td>
+        <td style="text-align:right;">${fmtMoney(i.unit_price)}</td>
+        <td style="text-align:right;">${fmtMoney(i.line_total)}</td>
+      </tr>`).join('');
+
+    const receiptHtml = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Receipt #${txn.id} — ScanDesk OS</title>
+<style>
+  body { font-family: 'Courier New', monospace; max-width: 340px; margin: 24px auto; color: #111; }
+  h1 { font-size: 16px; text-align: center; margin-bottom: 0; }
+  .sub { text-align: center; font-size: 11px; color: #555; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+  th, td { padding: 4px 2px; border-bottom: 1px dashed #999; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; color: #555; }
+  .totals { margin-top: 12px; font-size: 15px; display: flex; justify-content: space-between; font-weight: bold; border-top: 1px solid #333; padding-top: 8px; }
+  .paid-badge { text-align: center; margin-top: 10px; color: #16a34a; font-weight: bold; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>ScanDesk OS</h1>
+  <div class="sub">Transaction #${txn.id} · ${new Date(txn.created_at * 1000).toLocaleString()}</div>
+  <table>
+    <thead><tr><th>Item</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Price</th><th style="text-align:right;">Total</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="totals"><span>Total</span><span>${fmtMoney(txn.total)}</span></div>
+  <div class="paid-badge">✅ PAID</div>
+</body>
+</html>`;
+
+    const receiptWindow = window.open('', '_blank');
+    if (!receiptWindow) return; // popup blocked -- status line already confirms payment
+    receiptWindow.document.write(receiptHtml);
+    receiptWindow.document.close();
   }
 </script>
 {% endblock %}

@@ -31,7 +31,7 @@
       <div class="kpi-card">
         <div class="kpi-label">Revenue Today</div>
         <div class="kpi-value" id="kpi-revenue-today">$0.00</div>
-        <div class="kpi-trend trend-neutral" id="kpi-revenue-trend">From priced catalog items</div>
+        <div class="kpi-trend trend-neutral" id="kpi-revenue-trend">From completed transactions</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Avg Basket Size</div>
@@ -68,6 +68,23 @@
         </div>
       </div>
     </section>
+
+    <!-- Trend Charts: Revenue (bar) + Scan Activity (area line) -->
+    <div class="mini-chart-grid">
+      <section class="card">
+        <div class="card-title" style="margin-bottom: 4px;">📊 Revenue Trend (7 Days)</div>
+        <div class="chart-card-value" id="chart-revenue-total">$0.00</div>
+        <div class="chart-card-caption" id="chart-revenue-caption">Total across the last 7 days</div>
+        <div id="chart-revenue-container"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-title" style="margin-bottom: 4px;">📈 Scan Activity (24h)</div>
+        <div class="chart-card-value" id="chart-activity-total">0</div>
+        <div class="chart-card-caption" id="chart-activity-caption">Items detected per hour</div>
+        <div id="chart-activity-container"></div>
+      </section>
+    </div>
 
     <!-- Last Scan Item Breakdown -->
     <section class="card">
@@ -147,6 +164,19 @@
       </div>
     </section>
 
+    <!-- Confidence Trend -->
+    <section class="card">
+      <div class="card-title" style="margin-bottom: 4px;">🎯 Confidence Trend (7 Days)</div>
+      <div class="chart-card-caption">Daily average detection confidence</div>
+      <div id="chart-confidence-container"></div>
+    </section>
+
+    <!-- Top Products by Revenue -->
+    <section class="card">
+      <div class="card-title" style="margin-bottom: 12px;">🏅 Top Products by Revenue</div>
+      <div id="chart-top-revenue-container"></div>
+    </section>
+
     <!-- Product Performance -->
     <section class="card">
       <div class="card-title" style="margin-bottom: 12px;">Product Performance</div>
@@ -192,6 +222,139 @@
     return (value === null || value === undefined) ? '--%' : value.toFixed(1) + '%';
   }
 
+  function fmtMoney(value) {
+    return (value === null || value === undefined) ? '$0.00' : '$' + value.toFixed(2);
+  }
+
+  // ---- Lightweight inline SVG chart helpers (no external chart library) ----
+
+  function svgBarChart(labels, values, color) {
+    const w = 300, h = 110, padTop = 8, padBottom = 18, padSide = 6;
+    const max = Math.max(...values, 1);
+    const innerW = w - padSide * 2;
+    const gap = innerW / values.length;
+    const barWidth = Math.max(6, gap * 0.55);
+
+    let bars = '';
+    values.forEach((v, i) => {
+      const barHeight = (v / max) * (h - padTop - padBottom);
+      const x = padSide + i * gap + (gap - barWidth) / 2;
+      const y = h - padBottom - barHeight;
+      bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${Math.max(barHeight, 1).toFixed(1)}" rx="3" style="fill:${color};"></rect>`;
+    });
+
+    let tickLabels = '';
+    labels.forEach((l, i) => {
+      const x = padSide + i * gap + gap / 2;
+      tickLabels += `<text x="${x.toFixed(1)}" y="${h - 4}" text-anchor="middle" font-size="9" style="fill:var(--text-subtle);">${l}</text>`;
+    });
+
+    return `<svg viewBox="0 0 ${w} ${h}" style="width:100%; height:${h}px; display:block;">${bars}${tickLabels}</svg>`;
+  }
+
+  function svgLineChart(labels, values, color, opts) {
+    opts = opts || {};
+    const w = 300, h = 100, padTop = 10, padBottom = 18, padSide = 6;
+    const cleanValues = values.map(v => (v === null || v === undefined) ? 0 : v);
+    const max = Math.max(...cleanValues, opts.minMax || 1);
+    const min = opts.zeroFloor === false ? Math.min(...cleanValues) : 0;
+    const range = (max - min) || 1;
+    const innerW = w - padSide * 2;
+    const stepX = values.length > 1 ? innerW / (values.length - 1) : 0;
+
+    const points = cleanValues.map((v, i) => {
+      const x = padSide + i * stepX;
+      const y = h - padBottom - ((v - min) / range) * (h - padTop - padBottom);
+      return [x, y];
+    });
+
+    const polyline = points.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+    let area = '';
+    if (opts.area) {
+      const areaPath = `M${points[0][0].toFixed(1)},${(h - padBottom).toFixed(1)} L` +
+        points.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' L') +
+        ` L${points[points.length - 1][0].toFixed(1)},${(h - padBottom).toFixed(1)} Z`;
+      area = `<path d="${areaPath}" style="fill:${color}; opacity:0.14;"></path>`;
+    }
+    let dots = '';
+    if (opts.dots) {
+      dots = points.map((p, i) => values[i] === null
+        ? ''
+        : `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.5" style="fill:${color};"></circle>`
+      ).join('');
+    }
+
+    let tickLabels = '';
+    labels.forEach((l, i) => {
+      if (labels.length > 10 && i % Math.ceil(labels.length / 8) !== 0) return;
+      tickLabels += `<text x="${points[i][0].toFixed(1)}" y="${h - 4}" text-anchor="middle" font-size="9" style="fill:var(--text-subtle);">${l}</text>`;
+    });
+
+    return `<svg viewBox="0 0 ${w} ${h}" style="width:100%; height:${h}px; display:block;">
+      ${area}
+      <polyline points="${polyline}" style="fill:none; stroke:${color}; stroke-width:2;"></polyline>
+      ${dots}
+      ${tickLabels}
+    </svg>`;
+  }
+
+  function renderHBarChart(containerId, items, opts) {
+    opts = opts || {};
+    const container = document.getElementById(containerId);
+    if (!items || items.length === 0) {
+      container.innerHTML = `<div class="chart-empty">${opts.emptyText || 'No data yet'}</div>`;
+      return;
+    }
+    const max = Math.max(...items.map(i => i.value), 1);
+    container.innerHTML = items.map(i => `
+      <div class="hbar-row">
+        <div class="hbar-label-row"><span>${i.label}</span><span>${i.display}</span></div>
+        <div class="hbar-track"><div class="hbar-fill" style="width:${(i.value / max * 100).toFixed(1)}%;"></div></div>
+      </div>
+    `).join('');
+  }
+
+  function renderTrendCharts(ts) {
+    const revContainer = document.getElementById('chart-revenue-container');
+    const actContainer = document.getElementById('chart-activity-container');
+    const confContainer = document.getElementById('chart-confidence-container');
+
+    if (!ts.has_data) {
+      revContainer.innerHTML = '<div class="chart-empty">No scans yet</div>';
+      actContainer.innerHTML = '<div class="chart-empty">No scans yet</div>';
+      confContainer.innerHTML = '<div class="chart-empty">No scans yet</div>';
+      return;
+    }
+
+    const dailyRevenueTotal = ts.daily.revenue.reduce((a, b) => a + b, 0);
+    document.getElementById('chart-revenue-total').textContent = fmtMoney(dailyRevenueTotal);
+    revContainer.innerHTML = svgBarChart(ts.daily.labels, ts.daily.revenue, 'var(--primary)');
+
+    const hourlyScanTotal = ts.hourly.scans.reduce((a, b) => a + b, 0);
+    document.getElementById('chart-activity-total').textContent = hourlyScanTotal.toLocaleString();
+    actContainer.innerHTML = svgLineChart(ts.hourly.labels, ts.hourly.scans, 'var(--success)', { area: true });
+
+    confContainer.innerHTML = svgLineChart(ts.daily.labels, ts.daily.avg_confidence, 'var(--warning)', { dots: true, minMax: 100, zeroFloor: false });
+  }
+
+  function renderTopRevenue(topProducts) {
+    const items = (topProducts || [])
+      .map(p => ({ label: p.name, value: p.revenue, display: fmtMoney(p.revenue) }));
+    renderHBarChart('chart-top-revenue-container', items, { emptyText: 'No completed transactions yet — use Pay in Live Cart' });
+  }
+
+  async function refreshTimeseries() {
+    let ts;
+    try {
+      const res = await fetch('/api/timeseries');
+      ts = await res.json();
+    } catch (err) {
+      console.error('Failed to load /api/timeseries', err);
+      return;
+    }
+    renderTrendCharts(ts);
+  }
+
   function fmtMs(value) {
     return (value === null || value === undefined) ? '--ms' : Math.round(value) + 'ms';
   }
@@ -201,10 +364,6 @@
     if (accuracy >= 90) return 'badge-success';
     if (accuracy >= 80) return 'badge-warning';
     return 'badge-danger';
-  }
-
-  function fmtMoney(value) {
-    return (value === null || value === undefined) ? '$0.00' : '$' + value.toFixed(2);
   }
 
   function scoreClass(confidencePct) {
@@ -307,6 +466,7 @@
     document.getElementById('stat-low-confidence').textContent = fmtPct(data.low_confidence_pct);
 
     renderProductTable(data.products);
+    renderTopRevenue(data.top_products_by_revenue);
     renderLastScan(data.last_scan_items);
     renderTelemetry(data.events);
   }
@@ -426,7 +586,9 @@
 
   refreshStats();
   refreshPredictions();
+  refreshTimeseries();
   setInterval(refreshStats, 5000);
   setInterval(refreshPredictions, 10000);
+  setInterval(refreshTimeseries, 15000);
 </script>
 {% endblock %}

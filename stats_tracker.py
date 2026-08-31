@@ -9,9 +9,13 @@ report honestly from live traffic is detection confidence — that's what
 `YOLO(...).val(data=...)` instead of this running average.
 
 Revenue and product names come from `catalog.py` (a small persisted
-price/name side-car file) -- the detector itself has no notion of price,
-so every dollar figure here traces back to whatever was actually entered
-on the Product Catalog page, not a guess.
+price/name side-car file) for pricing detected items, but the actual
+"revenue" figures shown on the dashboard come from `db.py` -- the SQLite
+transactions table -- which only gets a row when a cashier presses Pay in
+Live Cart. A detection is not a sale; a completed checkout is. This module
+still tracks per-scan telemetry (confidence, latency, per-product scan
+counts) since none of that requires a completed transaction to be
+meaningful.
 """
 
 import math
@@ -22,8 +26,10 @@ from collections import defaultdict, deque
 import numpy as np
 
 import catalog
+import db
 
 MAX_EVENTS = 25
+MAX_SCAN_EVENTS = 5000
 
 
 class StatsTracker:
@@ -32,10 +38,10 @@ class StatsTracker:
         self._all_confidences = []          # every detection's confidence, ever
         self._inference_times_ms = []       # wall time per /predict call
         self._scan_count = 0                # number of /predict calls (a "scan")
-        self._revenue_total = 0.0           # sum of catalog price at time of each detection
         self._last_scan_items = []          # rich detail from the most recent /predict call
         self._per_product = defaultdict(lambda: {"scans": 0, "confidences": [], "timestamps": []})
-        self._events = deque(maxlen=MAX_EVENTS)   # real telemetry log, newest last
+        self._events = deque(maxlen=MAX_EVENTS)          # real telemetry log, newest last
+        self._scan_events = deque(maxlen=MAX_SCAN_EVENTS)  # one entry per /predict call, for trend charts
 
     def record(self, products, elapsed_ms):
         with self._lock:
@@ -44,7 +50,7 @@ class StatsTracker:
             self._inference_times_ms.append(elapsed_ms)
 
             last_items = []
-            call_revenue = 0.0
+            scanned_value = 0.0  # catalog value of items detected this scan -- NOT revenue
 
             for p in products:
                 self._all_confidences.append(p["confidence"])
@@ -54,7 +60,7 @@ class StatsTracker:
                 entry["timestamps"].append(now)
 
                 price = catalog.get_price(p["product"])
-                call_revenue += price
+                scanned_value += price
                 last_items.append({
                     "product_id": p["product"],
                     "name": catalog.get_name(p["product"]),
@@ -63,11 +69,15 @@ class StatsTracker:
                     "image_url": f"/static/catalog/{p['product']}.jpg",
                 })
 
-            self._revenue_total += call_revenue
             self._last_scan_items = last_items
+            self._scan_events.append({
+                "timestamp": now,
+                "items": len(products),
+                "avg_confidence": (sum(p["confidence"] for p in products) / len(products)) if products else None,
+            })
             self._log(
                 f"MODEL_INFER_OK: {len(products)} item(s) detected, "
-                f"{elapsed_ms:.0f}ms, ${call_revenue:.2f} this scan",
+                f"{elapsed_ms:.0f}ms, ${scanned_value:.2f} catalog value scanned",
                 level="info",
             )
 
@@ -116,20 +126,28 @@ class StatsTracker:
                 for e in reversed(self._events)
             ]
 
-            return {
-                "overall_accuracy": overall,
-                "last_scan_confidence": last_scan,
-                "inference_speed_ms": avg_speed,
-                "scans_today": self._scan_count,
-                "high_confidence_pct": high_conf,
-                "low_confidence_pct": low_conf,
-                "revenue_today": round(self._revenue_total, 2),
-                "avg_basket_size": avg_basket_size,
-                "products": products[:8],
-                "last_scan_items": self._last_scan_items,
-                "events": events,
-                "has_data": self._scan_count > 0,
-            }
+        # Revenue is read from the transactions DB (completed checkouts),
+        # outside the stats lock since it's an independent data source.
+        today_start = _start_of_today()
+        revenue_info = db.revenue_since(today_start)
+        top_products_by_revenue = db.revenue_by_product(limit=5)
+
+        return {
+            "overall_accuracy": overall,
+            "last_scan_confidence": last_scan,
+            "inference_speed_ms": avg_speed,
+            "scans_today": self._scan_count,
+            "high_confidence_pct": high_conf,
+            "low_confidence_pct": low_conf,
+            "revenue_today": revenue_info["revenue"],
+            "transactions_today": revenue_info["transaction_count"],
+            "avg_basket_size": avg_basket_size,
+            "products": products[:8],
+            "top_products_by_revenue": top_products_by_revenue,
+            "last_scan_items": self._last_scan_items,
+            "events": events,
+            "has_data": self._scan_count > 0,
+        }
 
     def predictions(self, window_days=14, forecast_days=7, lead_time_days=7, safety_factor=0.25):
         """
@@ -217,6 +235,80 @@ class StatsTracker:
                 "has_data": len(rows) > 0,
             }
 
+    def timeseries(self, hours=24, days=7):
+        """
+        Real hour-by-hour and day-by-day series for the trend charts on the
+        dashboard. Scan volume and confidence come from per-scan telemetry
+        (no synthetic/sample data); revenue comes from the transactions DB
+        (completed checkouts only) bucketed into the same windows. Buckets
+        with no activity simply report 0 -- they are not backfilled or
+        smoothed.
+        """
+        with self._lock:
+            now = time.time()
+            hour_seconds = 3600.0
+            day_seconds = 86400.0
+
+            hour_start = now - hours * hour_seconds
+            hourly = [{"scans": 0} for _ in range(hours)]
+
+            day_start = now - days * day_seconds
+            daily = [{"scans": 0, "confidences": []} for _ in range(days)]
+
+            for e in self._scan_events:
+                if e["timestamp"] >= hour_start:
+                    idx = min(hours - 1, int((e["timestamp"] - hour_start) // hour_seconds))
+                    hourly[idx]["scans"] += e["items"]
+
+                if e["timestamp"] >= day_start:
+                    idx = min(days - 1, int((e["timestamp"] - day_start) // day_seconds))
+                    daily[idx]["scans"] += e["items"]
+                    if e["avg_confidence"] is not None:
+                        daily[idx]["confidences"].append(e["avg_confidence"])
+
+            has_scan_data = len(self._scan_events) > 0
+
+        # Revenue comes from completed transactions, bucketed the same way,
+        # outside the stats lock since it's an independent data source.
+        hourly_revenue = [0.0] * hours
+        daily_revenue = [0.0] * days
+        transaction_totals = db.all_transaction_totals()
+        for txn_time, total in transaction_totals:
+            if txn_time >= hour_start:
+                idx = min(hours - 1, int((txn_time - hour_start) // hour_seconds))
+                hourly_revenue[idx] += total
+            if txn_time >= day_start:
+                idx = min(days - 1, int((txn_time - day_start) // day_seconds))
+                daily_revenue[idx] += total
+
+        hourly_labels = [
+            time.strftime("%H:00", time.localtime(hour_start + i * hour_seconds))
+            for i in range(hours)
+        ]
+        daily_labels = [
+            time.strftime("%a", time.localtime(day_start + i * day_seconds))
+            for i in range(days)
+        ]
+
+        return {
+            "hourly": {
+                "labels": hourly_labels,
+                "scans": [b["scans"] for b in hourly],
+                "revenue": [round(v, 2) for v in hourly_revenue],
+            },
+            "daily": {
+                "labels": daily_labels,
+                "scans": [b["scans"] for b in daily],
+                "revenue": [round(v, 2) for v in daily_revenue],
+                "avg_confidence": [
+                    round(100 * sum(b["confidences"]) / len(b["confidences"]), 1)
+                    if b["confidences"] else None
+                    for b in daily
+                ],
+            },
+            "has_data": has_scan_data or len(transaction_totals) > 0,
+        }
+
 
 def _pct_mean(values):
     if not values:
@@ -228,6 +320,13 @@ def _share(values, predicate):
     if not values:
         return None
     return round(100 * sum(1 for v in values if predicate(v)) / len(values), 1)
+
+
+def _start_of_today():
+    """Unix timestamp for local midnight -- the boundary for 'revenue today'."""
+    now = time.localtime()
+    start = time.struct_time((now.tm_year, now.tm_mon, now.tm_mday, 0, 0, 0, 0, 0, now.tm_isdst))
+    return time.mktime(start)
 
 
 class Timer:
