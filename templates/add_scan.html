@@ -1,0 +1,482 @@
+{% extends "base.html" %}
+{% set active_page = "api_products" %}
+{% block title %}Add New Scan - ScanDesk OS{% endblock %}
+
+{% block styles %}
+<style>
+  .capture-zone {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: #0f172a;
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  
+  .angle-indicator {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 14px;
+    backdrop-filter: blur(10px);
+    border: 2px solid;
+    transition: all 0.3s ease;
+  }
+  
+  .angle-good {
+    background: rgba(34, 197, 94, 0.2);
+    border-color: #22c55e;
+    color: #22c55e;
+  }
+  
+  .angle-ready {
+    background: rgba(234, 179, 8, 0.2);
+    border-color: #eab308;
+    color: #eab308;
+  }
+  
+  .angle-bad {
+    background: rgba(220, 38, 38, 0.2);
+    border-color: #dc2626;
+    color: #dc2626;
+  }
+  
+  .progress-ring {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 80px;
+    height: 80px;
+  }
+  
+  .progress-ring circle {
+    fill: none;
+    stroke-width: 8;
+  }
+  
+  .progress-ring .bg {
+    stroke: rgba(255, 255, 255, 0.1);
+  }
+  
+  .progress-ring .progress {
+    stroke: #22c55e;
+    stroke-linecap: round;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+    transition: stroke-dashoffset 0.3s ease;
+  }
+  
+  .progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 20px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  
+  .captured-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+    margin-top: 20px;
+  }
+  
+  .captured-thumb {
+    aspect-ratio: 1;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 3px solid #22c55e;
+    position: relative;
+    animation: fadeIn 0.3s ease;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  
+  .captured-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  .captured-thumb .badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #22c55e;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900">Add New Product Scan</h1>
+      <p class="text-slate-500 mt-1">Upload reference photos or capture 12 angles automatically</p>
+    </div>
+    <a href="{{ url_for('api_products') }}" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors">
+      ← Back to Products
+    </a>
+  </div>
+
+  <!-- Mode Selector -->
+  <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+    <div class="flex gap-4 mb-6">
+      <button id="mode-upload-btn" class="flex-1 px-6 py-4 rounded-xl border-2 border-primary-600 bg-primary-50 text-primary-700 font-semibold transition-all">
+        📤 Upload Photos
+      </button>
+      <button id="mode-live-btn" class="flex-1 px-6 py-4 rounded-xl border-2 border-slate-200 bg-white text-slate-700 font-semibold hover:border-slate-300 transition-all">
+        📷 Live Capture (Recommended)
+      </button>
+    </div>
+
+    <!-- Upload Mode -->
+    <div id="upload-mode" class="space-y-4">
+      <form id="upload-form" class="space-y-4">
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-2">Product ID (Optional)</label>
+          <input type="text" id="upload-product-id" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all font-mono" placeholder="Leave blank to auto-assign">
+        </div>
+        
+        <div>
+          <label class="block text-sm font-semibold text-slate-700 mb-2">Reference Photos</label>
+          <input type="file" id="upload-files" multiple accept="image/*" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700">
+          <p class="text-xs text-slate-500 mt-2">Upload multiple photos from different angles (recommended: 12+ images)</p>
+        </div>
+
+        <div id="upload-preview" class="grid grid-cols-4 sm:grid-cols-6 gap-3"></div>
+
+        <button type="submit" class="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-primary-500/20 transition-all">
+          Build Vectors from Uploads
+        </button>
+      </form>
+    </div>
+
+    <!-- Live Capture Mode -->
+    <div id="live-mode" class="hidden space-y-4">
+      <div id="camera-setup" class="space-y-4">
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <p class="text-sm text-amber-800 font-medium mb-2">📱 Connect your phone camera:</p>
+          <ol class="text-xs text-amber-700 space-y-1 list-decimal list-inside">
+            <li>Install a camera streaming app on your phone (e.g., IP Webcam)</li>
+            <li>Start the camera server and note the URL</li>
+            <li>Enter the URL below (format: http://192.168.x.x:8080/video)</li>
+          </ol>
+        </div>
+        
+        <form id="connect-form" class="flex gap-3">
+          <input type="text" id="camera-url" placeholder="http://192.168.x.x:8080/video" class="flex-1 px-4 py-3 rounded-xl border border-slate-200 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all font-mono text-sm" required>
+          <button type="submit" class="px-6 py-3 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-semibold shadow-lg shadow-primary-500/20 transition-all">
+            Connect Camera
+          </button>
+        </form>
+        <div id="connect-status" class="text-sm text-slate-500"></div>
+      </div>
+
+      <div id="capture-interface" class="hidden space-y-4">
+        <div class="capture-zone" id="capture-zone">
+          <img id="live-feed" class="absolute inset-0 w-full h-full object-cover" alt="Live feed">
+          
+          <!-- Angle Indicator -->
+          <div id="angle-indicator" class="angle-indicator angle-bad">
+            ❌ Adjust Angle
+          </div>
+
+          <!-- Progress Ring -->
+          <div class="progress-ring">
+            <svg width="80" height="80">
+              <circle class="bg" cx="40" cy="40" r="32"></circle>
+              <circle class="progress" id="progress-circle" cx="40" cy="40" r="32" 
+                      stroke-dasharray="201" stroke-dashoffset="201"></circle>
+            </svg>
+            <div class="progress-text" id="capture-count">0/12</div>
+          </div>
+
+          <!-- Confidence Display -->
+          <div class="absolute bottom-20px left-120px bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-lg text-sm font-mono">
+            Confidence: <span id="confidence-display">0%</span>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <button id="start-capture-btn" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-emerald-500/20 transition-all">
+            ▶ Start Auto-Capture
+          </button>
+          <button id="stop-capture-btn" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-red-500/20 transition-all hidden">
+            ⏸ Stop Capture
+          </button>
+          <button id="disconnect-btn" class="px-6 py-3 rounded-xl border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors">
+            Disconnect
+          </button>
+        </div>
+
+        <div id="captured-preview" class="captured-grid"></div>
+
+        <button id="build-vectors-btn" class="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-primary-500/20 transition-all hidden">
+          Build Vectors from Captures
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let captureInterval = null;
+  let capturedImages = [];
+  const TARGET_CAPTURES = 12;
+  const CONFIDENCE_THRESHOLD = 0.85;
+  const CAPTURE_COOLDOWN = 1500; // ms between captures
+  let lastCaptureTime = 0;
+
+  // Mode switching
+  document.getElementById('mode-upload-btn').addEventListener('click', () => {
+    document.getElementById('upload-mode').classList.remove('hidden');
+    document.getElementById('live-mode').classList.add('hidden');
+    document.getElementById('mode-upload-btn').classList.add('border-primary-600', 'bg-primary-50', 'text-primary-700');
+    document.getElementById('mode-upload-btn').classList.remove('border-slate-200', 'bg-white', 'text-slate-700');
+    document.getElementById('mode-live-btn').classList.remove('border-primary-600', 'bg-primary-50', 'text-primary-700');
+    document.getElementById('mode-live-btn').classList.add('border-slate-200', 'bg-white', 'text-slate-700');
+  });
+
+  document.getElementById('mode-live-btn').addEventListener('click', () => {
+    document.getElementById('live-mode').classList.remove('hidden');
+    document.getElementById('upload-mode').classList.add('hidden');
+    document.getElementById('mode-live-btn').classList.add('border-primary-600', 'bg-primary-50', 'text-primary-700');
+    document.getElementById('mode-live-btn').classList.remove('border-slate-200', 'bg-white', 'text-slate-700');
+    document.getElementById('mode-upload-btn').classList.remove('border-primary-600', 'bg-primary-50', 'text-primary-700');
+    document.getElementById('mode-upload-btn').classList.add('border-slate-200', 'bg-white', 'text-slate-700');
+  });
+
+  // Upload mode
+  document.getElementById('upload-files').addEventListener('change', (e) => {
+    const preview = document.getElementById('upload-preview');
+    preview.innerHTML = '';
+    Array.from(e.target.files).forEach(file => {
+      const img = document.createElement('img');
+      img.className = 'aspect-square object-cover rounded-lg border border-slate-200';
+      img.src = URL.createObjectURL(file);
+      preview.appendChild(img);
+    });
+  });
+
+  document.getElementById('upload-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const files = document.getElementById('upload-files').files;
+    if (files.length === 0) {
+      alert('Please select at least one image');
+      return;
+    }
+
+    const formData = new FormData();
+    const productId = document.getElementById('upload-product-id').value.trim();
+    if (productId) formData.append('product_id', productId);
+    Array.from(files).forEach(file => formData.append('images', file));
+
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Building vectors...';
+
+    try {
+      const res = await fetch('/api/products/new', { method: 'POST', body: formData });
+      const data = await res.json();
+      
+      if (data.error) {
+        alert('Error: ' + data.error);
+      } else {
+        alert(`✓ Successfully added product #${data.product_id} with ${data.reference_samples} reference samples!`);
+        window.location.href = '{{ url_for("api_products") }}';
+      }
+    } catch (err) {
+      alert('Network error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Build Vectors from Uploads';
+    }
+  });
+
+  // Live capture mode
+  document.getElementById('connect-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = document.getElementById('camera-url').value.trim();
+    const status = document.getElementById('connect-status');
+    status.textContent = 'Connecting...';
+
+    try {
+      const formData = new FormData();
+      formData.append('camera_url', url);
+      const res = await fetch('/connect_camera', { method: 'POST', body: formData });
+      const data = await res.json();
+
+      if (data.connected) {
+        status.textContent = '';
+        document.getElementById('camera-setup').classList.add('hidden');
+        document.getElementById('capture-interface').classList.remove('hidden');
+        document.getElementById('live-feed').src = '/video_feed?' + Date.now();
+      } else {
+        status.textContent = 'Could not connect. Check the URL and try again.';
+      }
+    } catch (err) {
+      status.textContent = 'Connection failed.';
+    }
+  });
+
+  document.getElementById('disconnect-btn').addEventListener('click', async () => {
+    stopCapture();
+    try {
+      await fetch('/disconnect_camera', { method: 'POST' });
+    } catch (err) {}
+    document.getElementById('camera-setup').classList.remove('hidden');
+    document.getElementById('capture-interface').classList.add('hidden');
+  });
+
+  document.getElementById('start-capture-btn').addEventListener('click', startCapture);
+  document.getElementById('stop-capture-btn').addEventListener('click', stopCapture);
+
+  function startCapture() {
+    capturedImages = [];
+    updateProgress();
+    document.getElementById('start-capture-btn').classList.add('hidden');
+    document.getElementById('stop-capture-btn').classList.remove('hidden');
+    document.getElementById('build-vectors-btn').classList.add('hidden');
+    
+    captureInterval = setInterval(checkAndCapture, 500);
+  }
+
+  function stopCapture() {
+    if (captureInterval) {
+      clearInterval(captureInterval);
+      captureInterval = null;
+    }
+    document.getElementById('start-capture-btn').classList.remove('hidden');
+    document.getElementById('stop-capture-btn').classList.add('hidden');
+    
+    if (capturedImages.length >= TARGET_CAPTURES) {
+      document.getElementById('build-vectors-btn').classList.remove('hidden');
+    }
+  }
+
+  async function checkAndCapture() {
+    const now = Date.now();
+    if (now - lastCaptureTime < CAPTURE_COOLDOWN) return;
+
+    try {
+      const res = await fetch('/api/capture-and-check', { method: 'POST' });
+      const data = await res.json();
+
+      if (data.error) return;
+
+      const confidence = data.confidence || 0;
+      const indicator = document.getElementById('angle-indicator');
+      const confidenceDisplay = document.getElementById('confidence-display');
+      
+      confidenceDisplay.textContent = (confidence * 100).toFixed(1) + '%';
+
+      if (data.good_angle && capturedImages.length < TARGET_CAPTURES) {
+        // Good angle - capture it
+        indicator.className = 'angle-indicator angle-good';
+        indicator.textContent = '✓ Capturing...';
+        
+        capturedImages.push(data.temp_image);
+        lastCaptureTime = now;
+        updateProgress();
+        addCapturedThumbnail(data.temp_image, capturedImages.length);
+        
+        // Brief success feedback
+        setTimeout(() => {
+          if (capturedImages.length < TARGET_CAPTURES) {
+            indicator.className = 'angle-indicator angle-ready';
+            indicator.textContent = '⚡ Ready for next angle';
+          }
+        }, 500);
+        
+        if (capturedImages.length >= TARGET_CAPTURES) {
+          stopCapture();
+          indicator.className = 'angle-indicator angle-good';
+          indicator.textContent = '✓ All 12 angles captured!';
+        }
+      } else if (confidence > 0.6) {
+        // Decent angle but not quite right
+        indicator.className = 'angle-indicator angle-ready';
+        indicator.textContent = '⚡ Almost there - adjust slightly';
+      } else {
+        // Bad angle
+        indicator.className = 'angle-indicator angle-bad';
+        indicator.textContent = '❌ Adjust angle';
+      }
+    } catch (err) {
+      console.error('Capture check failed', err);
+    }
+  }
+
+  function updateProgress() {
+    const count = capturedImages.length;
+    const percentage = (count / TARGET_CAPTURES) * 100;
+    const circumference = 201; // 2 * pi * 32
+    const offset = circumference - (percentage / 100) * circumference;
+    
+    document.getElementById('progress-circle').style.strokeDashoffset = offset;
+    document.getElementById('capture-count').textContent = `${count}/${TARGET_CAPTURES}`;
+  }
+
+  function addCapturedThumbnail(imagePath, index) {
+    const grid = document.getElementById('captured-preview');
+    const thumb = document.createElement('div');
+    thumb.className = 'captured-thumb';
+    thumb.innerHTML = `
+      <img src="/uploads/${imagePath}" alt="Capture ${index}">
+      <div class="badge">${index}</div>
+    `;
+    grid.appendChild(thumb);
+  }
+
+  document.getElementById('build-vectors-btn').addEventListener('click', async () => {
+    if (capturedImages.length === 0) {
+      alert('No images captured');
+      return;
+    }
+
+    const btn = document.getElementById('build-vectors-btn');
+    btn.disabled = true;
+    btn.textContent = 'Building vectors...';
+
+    try {
+      const formData = new FormData();
+      capturedImages.forEach(img => formData.append('temp_images', img));
+      
+      const res = await fetch('/api/products/new-from-captures', { method: 'POST', body: formData });
+      const data = await res.json();
+      
+      if (data.error) {
+        alert('Error: ' + data.error);
+      } else {
+        alert(`✓ Successfully added product #${data.product_id} with ${data.reference_samples} reference samples!`);
+        window.location.href = '{{ url_for("api_products") }}';
+      }
+    } catch (err) {
+      alert('Network error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Build Vectors from Captures';
+    }
+  });
+</script>
+{% endblock %}

@@ -1,251 +1,151 @@
 {% extends 'base.html' %}
-
 {% set active_page = "dashboard" %}
 
 {% block content %}
-<div class="dashboard-container">
+<div class="space-y-6">
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900">Dashboard</h1>
+      <p class="text-slate-500 mt-1">Real-time checkout monitoring and model performance</p>
+    </div>
+    <div class="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 w-fit">
+      <span class="relative flex h-2.5 w-2.5">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+      </span>
+      <span class="text-sm font-semibold">System Online</span>
+    </div>
+  </div>
 
-  <!-- Left Main Column -->
-  <main class="main-content">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+      <div class="text-sm font-medium text-slate-500 mb-1">Overall Accuracy</div>
+      <div class="text-3xl font-bold text-slate-900 font-mono" id="kpi-overall-accuracy">--%</div>
+      <div class="text-xs text-slate-400 mt-2" id="kpi-overall-accuracy-trend">Awaiting scans</div>
+    </div>
+    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+      <div class="text-sm font-medium text-slate-500 mb-1">Last Scan Confidence</div>
+      <div class="text-3xl font-bold text-slate-900 font-mono" id="kpi-last-confidence">--%</div>
+      <div class="text-xs text-slate-400 mt-2" id="kpi-last-confidence-trend">No scans yet</div>
+    </div>
+    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+      <div class="text-sm font-medium text-slate-500 mb-1">Inference Speed</div>
+      <div class="text-3xl font-bold text-slate-900 font-mono" id="kpi-inference-speed">--ms</div>
+      <div class="text-xs text-slate-400 mt-2">Real-time latency</div>
+    </div>
+    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+      <div class="text-sm font-medium text-slate-500 mb-1">Unique Products</div>
+      <div class="text-3xl font-bold text-slate-900 font-mono" id="kpi-unique-products">0</div>
+      <div class="text-xs text-slate-400 mt-2">Distinct items detected</div>
+    </div>
+  </div>
 
-    <!-- Key Statistics -->
-    <section class="card">
-      <div class="card-title" style="margin-bottom: 16px;">Key Statistics</div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+      <div class="text-sm font-medium text-slate-500 mb-1">Scans Today</div>
+      <div class="text-2xl font-bold text-slate-900 font-mono" id="kpi-scans-today">0</div>
+    </div>
+    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+      <div class="text-sm font-medium text-slate-500 mb-1">Avg Basket Size</div>
+      <div class="text-2xl font-bold text-slate-900 font-mono" id="kpi-basket-size">--</div>
+    </div>
+    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+      <div class="text-sm font-medium text-slate-500 mb-1">Revenue Today</div>
+      <div class="text-2xl font-bold text-emerald-600 font-mono" id="kpi-revenue-today">$0.00</div>
+    </div>
+    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+      <div class="text-sm font-medium text-slate-500 mb-1">Transactions</div>
+      <div class="text-2xl font-bold text-slate-900 font-mono" id="kpi-transactions-today">0</div>
+    </div>
+  </div>
 
-      <div class="kpi-section">
-        <div class="kpi-section-label">Model Performance</div>
-        <div class="kpi-grid">
-          <div class="kpi-card">
-            <div class="kpi-label">Overall Model Accuracy</div>
-            <div class="kpi-value" id="kpi-overall-accuracy">--%</div>
-            <div class="kpi-trend trend-neutral" id="kpi-overall-accuracy-trend">Awaiting scans</div>
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+    <div class="xl:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+        <h2 class="font-semibold text-slate-900 flex items-center gap-2"><span>📷</span> Live Camera Desk Stream</h2>
+      </div>
+      <div class="relative aspect-video bg-slate-900 flex items-center justify-center">
+        {% if camera_connected %}
+          <img src="{{ url_for('video_feed') }}" alt="Live phone camera stream" class="absolute inset-0 w-full h-full object-cover">
+        {% else %}
+          <div class="text-center p-8">
+            <div class="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">📷</div>
+            <p class="text-slate-400 mb-4">Camera is currently disconnected</p>
+            <a href="/livecart" class="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors">Connect Camera in Live Cart</a>
           </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Last Scan Confidence</div>
-            <div class="kpi-value" id="kpi-last-confidence">--%</div>
-            <div class="kpi-trend trend-neutral" id="kpi-last-confidence-trend">No scans yet</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Inference Speed</div>
-            <div class="kpi-value" id="kpi-inference-speed">--ms</div>
-            <div class="kpi-trend trend-neutral">Real-time latency</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Unique Products Scanned</div>
-            <div class="kpi-value" id="kpi-unique-products">0</div>
-            <div class="kpi-trend trend-neutral">Distinct items detected</div>
-          </div>
+        {% endif %}
+        <div class="absolute top-4 left-4 right-4 flex justify-between pointer-events-none">
+          <span class="px-3 py-1.5 bg-black/60 backdrop-blur-md text-white text-xs font-mono rounded-lg border border-white/10">{{ "Phone Camera" if camera_connected else "Camera" }}</span>
+          <span class="px-3 py-1.5 bg-black/60 backdrop-blur-md text-emerald-400 text-xs font-mono rounded-lg border border-white/10 flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> {{ "AI INFERENCE ACTIVE" if camera_connected else "AI INFERENCE IDLE" }}
+          </span>
         </div>
       </div>
-
-      <div class="kpi-section">
-        <div class="kpi-section-label">Today's Activity</div>
-        <div class="kpi-grid">
-          <div class="kpi-card">
-            <div class="kpi-label">Scans Today</div>
-            <div class="kpi-value" id="kpi-scans-today">0</div>
-            <div class="kpi-trend trend-neutral" id="kpi-scans-trend">Since page load</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Avg Basket Size</div>
-            <div class="kpi-value" id="kpi-basket-size">--</div>
-            <div class="kpi-trend trend-neutral">Items per scan</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Revenue Today</div>
-            <div class="kpi-value" id="kpi-revenue-today">$0.00</div>
-            <div class="kpi-trend trend-neutral" id="kpi-revenue-trend">From completed transactions</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Transactions Today</div>
-            <div class="kpi-value" id="kpi-transactions-today">0</div>
-            <div class="kpi-trend trend-neutral">Completed checkouts</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="kpi-section">
-        <div class="kpi-section-label">All-Time Totals</div>
-        <div class="kpi-grid">
-          <div class="kpi-card">
-            <div class="kpi-label">All-Time Revenue</div>
-            <div class="kpi-value" id="kpi-alltime-revenue">$0.00</div>
-            <div class="kpi-trend trend-neutral">Lifetime, from checkouts</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Total Transactions</div>
-            <div class="kpi-value" id="kpi-alltime-transactions">0</div>
-            <div class="kpi-trend trend-neutral">Lifetime checkouts</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Avg Transaction Value</div>
-            <div class="kpi-value" id="kpi-avg-transaction">$0.00</div>
-            <div class="kpi-trend trend-neutral">Per completed order</div>
-          </div>
-          <div class="kpi-card">
-            <div class="kpi-label">Items in Catalog</div>
-            <div class="kpi-value" id="kpi-catalog-size">--</div>
-            <div class="kpi-trend trend-neutral">Registered products</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Live Camera Viewport Box -->
-    <section class="card camera-card">
-      <div class="card-header">
-        <div class="card-title">
-          <span>📷 Live Camera Desk Stream</span>
-        </div>
-      </div>
-
-      <div class="camera-viewport">
-        <div class="camera-stream">
-          <div class="desk-surface">
-            {% if camera_connected %}
-            <img src="{{ url_for('video_feed') }}" alt="Live phone camera stream"
-              style="width: 100%; height: 100%; object-fit: cover;">
-            {% else %}
-            <div style="display: flex; justify-content: center; align-items: center; height: 100%;">
-              <a href="/livecart" class="btn btn-primary" style="text-decoration: none;">Connect Camera in Live Cart</a>
-            </div>
-            {% endif %}
-          </div>
-        </div>
-
-        <div class="camera-hud">
-          <div class="hud-chip">{{ "Phone Camera" if camera_connected else "Camera" }}</div>
-          <div class="hud-chip">{{ "AI INFERENCE ACTIVE" if camera_connected else "AI INFERENCE IDLE" }}</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Trend Charts: Revenue (bar) + Scan Activity (area line) -->
-    <div class="mini-chart-grid">
-      <section class="card">
-        <div class="card-title" style="margin-bottom: 4px;">📊 Revenue Trend (7 Days)</div>
-        <div class="chart-card-value" id="chart-revenue-total">$0.00</div>
-        <div class="chart-card-caption" id="chart-revenue-caption">Total across the last 7 days</div>
-        <div id="chart-revenue-container"></div>
-      </section>
-
-      <section class="card">
-        <div class="card-title" style="margin-bottom: 4px;">📈 Scan Activity (24h)</div>
-        <div class="chart-card-value" id="chart-activity-total">0</div>
-        <div class="chart-card-caption" id="chart-activity-caption">Items detected per hour</div>
-        <div id="chart-activity-container"></div>
-      </section>
     </div>
 
-    <!-- Last Scan Item Breakdown -->
-    <section class="card">
-      <div class="card-header">
-        <div class="card-title" id="last-scan-title">Last Scan Results</div>
-      </div>
-
-      <div class="scan-list" id="last-scan-list">
-        <div style="text-align: center; color: var(--text-muted); padding: 20px 0; font-size: 13px;">No scans yet — run a scan to see live results here.</div>
-      </div>
-    </section>
-
-  </main>
-
-  <!-- Right Sidebar Statistics Column -->
-  <aside class="sidebar-content">
-
-    <!-- Model Diagnostics -->
-    <section class="card">
-      <div class="card-title">Model Diagnostics</div>
-      <div class="gauge-container">
-        <div style="font-size: 32px; font-weight: 700; font-family: var(--font-mono);" id="gauge-accuracy-value">--%</div>
-        <div style="font-size: 12px; color: var(--text-muted);">Current Accuracy Baseline</div>
-
-        <div class="accuracy-progress-bar">
-          <div class="accuracy-progress-fill" id="accuracy-progress-fill" style="width: 0%;"></div>
+    <div class="space-y-6">
+      <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+        <h3 class="font-semibold text-slate-900 mb-4">Model Diagnostics</h3>
+        <div class="text-center py-4">
+          <div class="text-4xl font-bold text-slate-900 font-mono" id="gauge-accuracy-value">--%</div>
+          <div class="text-sm text-slate-500 mt-1">Current Accuracy Baseline</div>
+          <div class="w-full bg-slate-100 rounded-full h-2.5 mt-4 overflow-hidden">
+            <div class="bg-primary-600 h-2.5 rounded-full transition-all duration-500" id="accuracy-progress-fill" style="width: 0%"></div>
+          </div>
+          <div class="flex justify-between text-xs text-slate-400 mt-2 font-mono"><span>0%</span><span>Target: 95%</span><span>100%</span></div>
         </div>
-
-        <div style="display: flex; justify-content: space-between; width: 100%; font-size: 11px; color: var(--text-subtle);">
-          <span>0%</span>
-          <span>Target: 95%</span>
-          <span>100%</span>
+        <div class="border-t border-slate-100 pt-4 mt-4 space-y-2">
+          <div class="flex justify-between text-sm"><span class="text-slate-500">High Confidence (>90%):</span><span class="font-semibold text-slate-900 font-mono" id="stat-high-confidence">--%</span></div>
+          <div class="flex justify-between text-sm"><span class="text-slate-500">Low Confidence (<80%):</span><span class="font-semibold text-amber-600 font-mono" id="stat-low-confidence">--%</span></div>
         </div>
       </div>
-
-      <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 8px; font-size: 12px;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-          <span style="color: var(--text-muted);">High Confidence (&gt;90%):</span>
-          <span style="font-weight: 600;" id="stat-high-confidence">--%</span>
-        </div>
-        <div style="display: flex; justify-content: space-between;">
-          <span style="color: var(--text-muted);">Low Confidence (&lt;80%):</span>
-          <span style="font-weight: 600; color: var(--warning);" id="stat-low-confidence">--%</span>
+      <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+        <h3 class="font-semibold text-slate-900 mb-4">Model Alerts</h3>
+        <div class="space-y-3" id="alert-list">
+          <div class="text-sm text-slate-400 text-center py-4">No alerts yet — waiting on scan data.</div>
         </div>
       </div>
-    </section>
+    </div>
+  </div>
 
-    <!-- Confidence Trend -->
-    <section class="card">
-      <div class="card-title" style="margin-bottom: 4px;">🎯 Confidence Trend (7 Days)</div>
-      <div class="chart-card-caption">Daily average detection confidence</div>
-      <div id="chart-confidence-container"></div>
-    </section>
+  <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+    <div class="p-5 border-b border-slate-100"><h2 class="font-semibold text-slate-900" id="last-scan-title">Last Scan Results</h2></div>
+    <div class="divide-y divide-slate-100" id="last-scan-list">
+      <div class="text-center text-slate-400 py-8 text-sm">No scans yet — run a scan to see live results here.</div>
+    </div>
+  </div>
 
-    <!-- Top Products by Revenue -->
-    <section class="card">
-      <div class="card-title" style="margin-bottom: 12px;">🏅 Top Products by Revenue</div>
-      <div id="chart-top-revenue-container"></div>
-    </section>
-
-    <!-- Product Performance -->
-    <section class="card">
-      <div class="card-title" style="margin-bottom: 12px;">Product Performance</div>
-
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Product</th>
-            <th>Scans</th>
-            <th>Accuracy</th>
-          </tr>
-        </thead>
-        <tbody id="product-performance-body">
-          <tr>
-            <td colspan="3" style="text-align: center; color: var(--text-muted);">No scans yet</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <!-- Model Alerts -->
-    <section class="card">
-      <div class="card-title" style="margin-bottom: 12px;">Model Alerts</div>
-      <div class="alert-list" id="alert-list">
-        <div class="alert-item" style="color: var(--text-muted);">No alerts yet — waiting on scan data.</div>
-      </div>
-    </section>
-
-    <!-- Telemetry Log -->
-    <section class="card">
-      <div class="card-title" style="margin-bottom: 8px;">Real-time Telemetry</div>
-      <div id="telemetry-log" style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto;">
-        <div>Waiting for activity...</div>
-      </div>
-    </section>
-
-  </aside>
-
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+      <h3 class="font-semibold text-slate-900 mb-1">📊 Revenue Trend (7 Days)</h3>
+      <div class="text-2xl font-bold text-slate-900 font-mono mb-1" id="chart-revenue-total">$0.00</div>
+      <div class="text-xs text-slate-500 mb-4">Total across the last 7 days</div>
+      <div id="chart-revenue-container"></div>
+    </div>
+    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+      <h3 class="font-semibold text-slate-900 mb-1">📈 Scan Activity (24h)</h3>
+      <div class="text-2xl font-bold text-slate-900 font-mono mb-1" id="chart-activity-total">0</div>
+      <div class="text-xs text-slate-500 mb-4">Items detected per hour</div>
+      <div id="chart-activity-container"></div>
+    </div>
+  </div>
 </div>
 
 <script>
-  function fmtPct(value) {
-    return (value === null || value === undefined) ? '--%' : value.toFixed(1) + '%';
+  function fmtPct(value) { return (value === null || value === undefined) ? '--%' : value.toFixed(1) + '%'; }
+  function fmtMoney(value) { return (value === null || value === undefined) ? '$0.00' : '$' + value.toFixed(2); }
+  function fmtMs(value) { return (value === null || value === undefined) ? '--ms' : Math.round(value) + 'ms'; }
+  function badgeClass(accuracy) {
+    if (accuracy === null || accuracy === undefined) return 'bg-amber-50 text-amber-700 border border-amber-100';
+    if (accuracy >= 90) return 'bg-emerald-50 text-emerald-700 border border-emerald-100';
+    if (accuracy >= 80) return 'bg-amber-50 text-amber-700 border border-amber-100';
+    return 'bg-red-50 text-red-700 border border-red-100';
   }
-
-  function fmtMoney(value) {
-    return (value === null || value === undefined) ? '$0.00' : '$' + value.toFixed(2);
+  function scoreClass(confidencePct) {
+    if (confidencePct >= 90) return 'text-emerald-600';
+    if (confidencePct >= 80) return 'text-amber-600';
+    return 'text-red-600';
   }
-
-  // ---- Lightweight inline SVG chart helpers (no external chart library) ----
 
   function svgBarChart(labels, values, color) {
     const w = 300, h = 110, padTop = 8, padBottom = 18, padSide = 6;
@@ -253,7 +153,6 @@
     const innerW = w - padSide * 2;
     const gap = innerW / values.length;
     const barWidth = Math.max(6, gap * 0.55);
-
     let bars = '';
     values.forEach((v, i) => {
       const barHeight = (v / max) * (h - padTop - padBottom);
@@ -261,13 +160,11 @@
       const y = h - padBottom - barHeight;
       bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${Math.max(barHeight, 1).toFixed(1)}" rx="3" style="fill:${color};"></rect>`;
     });
-
     let tickLabels = '';
     labels.forEach((l, i) => {
       const x = padSide + i * gap + gap / 2;
-      tickLabels += `<text x="${x.toFixed(1)}" y="${h - 4}" text-anchor="middle" font-size="9" style="fill:var(--text-subtle);">${l}</text>`;
+      tickLabels += `<text x="${x.toFixed(1)}" y="${h - 4}" text-anchor="middle" font-size="9" style="fill:#94a3b8;">${l}</text>`;
     });
-
     return `<svg viewBox="0 0 ${w} ${h}" style="width:100%; height:${h}px; display:block;">${bars}${tickLabels}</svg>`;
   }
 
@@ -280,55 +177,41 @@
     const range = (max - min) || 1;
     const innerW = w - padSide * 2;
     const stepX = values.length > 1 ? innerW / (values.length - 1) : 0;
-
     const points = cleanValues.map((v, i) => {
       const x = padSide + i * stepX;
       const y = h - padBottom - ((v - min) / range) * (h - padTop - padBottom);
       return [x, y];
     });
-
     const polyline = points.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
     let area = '';
     if (opts.area) {
-      const areaPath = `M${points[0][0].toFixed(1)},${(h - padBottom).toFixed(1)} L` +
-        points.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' L') +
-        ` L${points[points.length - 1][0].toFixed(1)},${(h - padBottom).toFixed(1)} Z`;
+      const areaPath = `M${points[0][0].toFixed(1)},${(h - padBottom).toFixed(1)} L` + points.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' L') + ` L${points[points.length - 1][0].toFixed(1)},${(h - padBottom).toFixed(1)} Z`;
       area = `<path d="${areaPath}" style="fill:${color}; opacity:0.14;"></path>`;
     }
     let dots = '';
     if (opts.dots) {
-      dots = points.map((p, i) => values[i] === null
-        ? ''
-        : `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.5" style="fill:${color};"></circle>`
-      ).join('');
+      dots = points.map((p, i) => values[i] === null ? '' : `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.5" style="fill:${color};"></circle>`).join('');
     }
-
     let tickLabels = '';
     labels.forEach((l, i) => {
       if (labels.length > 10 && i % Math.ceil(labels.length / 8) !== 0) return;
-      tickLabels += `<text x="${points[i][0].toFixed(1)}" y="${h - 4}" text-anchor="middle" font-size="9" style="fill:var(--text-subtle);">${l}</text>`;
+      tickLabels += `<text x="${points[i][0].toFixed(1)}" y="${h - 4}" text-anchor="middle" font-size="9" style="fill:#94a3b8;">${l}</text>`;
     });
-
-    return `<svg viewBox="0 0 ${w} ${h}" style="width:100%; height:${h}px; display:block;">
-      ${area}
-      <polyline points="${polyline}" style="fill:none; stroke:${color}; stroke-width:2;"></polyline>
-      ${dots}
-      ${tickLabels}
-    </svg>`;
+    return `<svg viewBox="0 0 ${w} ${h}" style="width:100%; height:${h}px; display:block;">${area}<polyline points="${polyline}" style="fill:none; stroke:${color}; stroke-width:2;"></polyline>${dots}${tickLabels}</svg>`;
   }
 
   function renderHBarChart(containerId, items, opts) {
     opts = opts || {};
     const container = document.getElementById(containerId);
     if (!items || items.length === 0) {
-      container.innerHTML = `<div class="chart-empty">${opts.emptyText || 'No data yet'}</div>`;
+      container.innerHTML = `<div class="text-center text-slate-400 py-4 text-sm">${opts.emptyText || 'No data yet'}</div>`;
       return;
     }
     const max = Math.max(...items.map(i => i.value), 1);
     container.innerHTML = items.map(i => `
-      <div class="hbar-row">
-        <div class="hbar-label-row"><span>${i.label}</span><span>${i.display}</span></div>
-        <div class="hbar-track"><div class="hbar-fill" style="width:${(i.value / max * 100).toFixed(1)}%;"></div></div>
+      <div class="mb-3 last:mb-0">
+        <div class="flex justify-between text-xs mb-1"><span class="font-medium text-slate-700">${i.label}</span><span class="text-slate-500 font-mono font-semibold">${i.display}</span></div>
+        <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div class="bg-emerald-500 h-2 rounded-full transition-all duration-500" style="width:${(i.value / max * 100).toFixed(1)}%;"></div></div>
       </div>
     `).join('');
   }
@@ -337,88 +220,57 @@
     const revContainer = document.getElementById('chart-revenue-container');
     const actContainer = document.getElementById('chart-activity-container');
     const confContainer = document.getElementById('chart-confidence-container');
-
     if (!ts.has_data) {
-      revContainer.innerHTML = '<div class="chart-empty">No scans yet</div>';
-      actContainer.innerHTML = '<div class="chart-empty">No scans yet</div>';
-      confContainer.innerHTML = '<div class="chart-empty">No scans yet</div>';
+      revContainer.innerHTML = '<div class="text-center text-slate-400 py-4 text-sm">No scans yet</div>';
+      actContainer.innerHTML = '<div class="text-center text-slate-400 py-4 text-sm">No scans yet</div>';
+      confContainer.innerHTML = '<div class="text-center text-slate-400 py-4 text-sm">No scans yet</div>';
       return;
     }
-
     const dailyRevenueTotal = ts.daily.revenue.reduce((a, b) => a + b, 0);
     document.getElementById('chart-revenue-total').textContent = fmtMoney(dailyRevenueTotal);
-    revContainer.innerHTML = svgBarChart(ts.daily.labels, ts.daily.revenue, 'var(--primary)');
-
+    revContainer.innerHTML = svgBarChart(ts.daily.labels, ts.daily.revenue, '#4f46e5');
     const hourlyScanTotal = ts.hourly.scans.reduce((a, b) => a + b, 0);
     document.getElementById('chart-activity-total').textContent = hourlyScanTotal.toLocaleString();
-    actContainer.innerHTML = svgLineChart(ts.hourly.labels, ts.hourly.scans, 'var(--success)', { area: true });
-
-    confContainer.innerHTML = svgLineChart(ts.daily.labels, ts.daily.avg_confidence, 'var(--warning)', { dots: true, minMax: 100, zeroFloor: false });
+    actContainer.innerHTML = svgLineChart(ts.hourly.labels, ts.hourly.scans, '#10b981', { area: true });
+    confContainer.innerHTML = svgLineChart(ts.daily.labels, ts.daily.avg_confidence, '#f59e0b', { dots: true, minMax: 100, zeroFloor: false });
   }
 
   function renderTopRevenue(topProducts) {
-    const items = (topProducts || [])
-      .map(p => ({ label: p.name, value: p.revenue, display: fmtMoney(p.revenue) }));
+    const items = (topProducts || []).map(p => ({ label: p.name, value: p.revenue, display: fmtMoney(p.revenue) }));
     renderHBarChart('chart-top-revenue-container', items, { emptyText: 'No completed transactions yet — use Pay in Live Cart' });
   }
 
   async function refreshTimeseries() {
     let ts;
-    try {
-      const res = await fetch('/api/timeseries');
-      ts = await res.json();
-    } catch (err) {
-      console.error('Failed to load /api/timeseries', err);
-      return;
-    }
+    try { const res = await fetch('/api/timeseries'); ts = await res.json(); } catch (err) { return; }
     renderTrendCharts(ts);
-  }
-
-  function fmtMs(value) {
-    return (value === null || value === undefined) ? '--ms' : Math.round(value) + 'ms';
-  }
-
-  function badgeClass(accuracy) {
-    if (accuracy === null || accuracy === undefined) return 'badge-warning';
-    if (accuracy >= 90) return 'badge-success';
-    if (accuracy >= 80) return 'badge-warning';
-    return 'badge-danger';
-  }
-
-  function scoreClass(confidencePct) {
-    if (confidencePct >= 90) return 'score-high';
-    if (confidencePct >= 80) return 'score-med';
-    return 'score-low';
   }
 
   function renderLastScan(items) {
     const list = document.getElementById('last-scan-list');
     const title = document.getElementById('last-scan-title');
     if (!items || items.length === 0) {
-      list.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px 0; font-size: 13px;">No scans yet — run a scan to see live results here.</div>';
+      list.innerHTML = '<div class="text-center text-slate-400 py-8 text-sm">No scans yet — run a scan to see live results here.</div>';
       title.textContent = 'Last Scan Results';
       return;
     }
-
     const total = items.reduce((sum, i) => sum + (i.price || 0), 0);
     title.textContent = `Last Scan Results (${items.length} item${items.length === 1 ? '' : 's'}, ${fmtMoney(total)})`;
-
     list.innerHTML = items.map(item => {
       const confPct = item.confidence * 100;
       return `
-        <div class="scan-item">
-          <div class="item-info">
-            <img class="item-thumb" src="${item.image_url}" alt="${item.name}"
-              style="object-fit: cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';">
-            <div class="item-thumb" style="display: none;">📦</div>
+        <div class="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+          <div class="flex items-center gap-3">
+            <img class="w-10 h-10 rounded-lg object-cover bg-slate-100" src="${item.image_url}" alt="${item.name}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+            <div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-lg hidden">📦</div>
             <div>
-              <div class="item-name">${item.name}</div>
-              <div class="item-meta">ID: ${item.product_id}${item.price ? ' | ' + fmtMoney(item.price) : ' | Price not set'}</div>
+              <div class="font-semibold text-sm text-slate-900">${item.name}</div>
+              <div class="text-xs text-slate-500">ID: ${item.product_id}${item.price ? ' | ' + fmtMoney(item.price) : ' | Price not set'}</div>
             </div>
           </div>
-          <div class="item-score">
-            <div class="score-value ${scoreClass(confPct)}">${confPct.toFixed(1)}%</div>
-            <div class="item-meta">${confPct >= 90 ? 'High Confidence' : confPct >= 80 ? 'Medium Confidence' : 'Attention Required'}</div>
+          <div class="text-right">
+            <div class="font-mono font-semibold text-sm ${scoreClass(confPct)}">${confPct.toFixed(1)}%</div>
+            <div class="text-xs text-slate-500">${confPct >= 90 ? 'High Confidence' : confPct >= 80 ? 'Medium Confidence' : 'Attention Required'}</div>
           </div>
         </div>
       `;
@@ -427,111 +279,80 @@
 
   function renderTelemetry(events) {
     const log = document.getElementById('telemetry-log');
-    if (!events || events.length === 0) {
-      log.innerHTML = '<div>Waiting for activity...</div>';
-      return;
-    }
-    log.innerHTML = events.map(e => `<div>[${e.time}] ${e.message}</div>`).join('');
+    if (!log) return;
+    if (!events || events.length === 0) { log.innerHTML = '<div class="text-slate-400">Waiting for activity...</div>'; return; }
+    log.innerHTML = events.map(e => `<div class="text-xs font-mono text-slate-600"><span class="text-slate-400">[${e.time}]</span> ${e.message}</div>`).join('');
   }
 
   function renderProductTable(products) {
     const body = document.getElementById('product-performance-body');
+    if (!body) return;
     if (!products || products.length === 0) {
-      body.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">No scans yet</td></tr>';
+      body.innerHTML = '<tr><td colspan="3" class="text-center text-slate-400 py-4">No scans yet</td></tr>';
       return;
     }
     body.innerHTML = products.map(p => `
-      <tr>
-        <td>${p.name}</td>
-        <td>${p.scans}</td>
-        <td><span class="badge ${badgeClass(p.accuracy)}">${fmtPct(p.accuracy)}</span></td>
+      <tr class="border-b border-slate-50 last:border-0">
+        <td class="py-3 px-4 text-sm font-medium text-slate-900">${p.name}</td>
+        <td class="py-3 px-4 text-sm text-slate-600 font-mono">${p.scans}</td>
+        <td class="py-3 px-4"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeClass(p.accuracy)}">${fmtPct(p.accuracy)}</span></td>
       </tr>
+    `).join('');
+  }
+
+  function renderModelAlerts(stats) {
+    const list = document.getElementById('alert-list');
+    const alerts = [];
+    if (stats && stats.products) {
+      stats.products.forEach(p => {
+        if (p.accuracy !== null && p.accuracy !== undefined && p.accuracy < 80) {
+          alerts.push({ level: 'danger', icon: '⚠️', text: `${p.name} has low detection confidence (${p.accuracy.toFixed(1)}%) — may need more training images.` });
+        }
+      });
+    }
+    if (alerts.length === 0) {
+      list.innerHTML = '<div class="text-sm text-slate-400 text-center py-4">No alerts right now — everything looks steady.</div>';
+      return;
+    }
+    list.innerHTML = alerts.slice(0, 6).map(a => `
+      <div class="flex gap-3 p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-700">
+        <span class="flex-shrink-0">${a.icon}</span>
+        <span>${a.text}</span>
+      </div>
     `).join('');
   }
 
   async function refreshStats() {
     let data;
-    try {
-      const res = await fetch('/stats');
-      data = await res.json();
-    } catch (err) {
-      console.error('Failed to load /stats', err);
-      return;
-    }
-
+    try { const res = await fetch('/stats'); data = await res.json(); } catch (err) { return; }
     renderModelAlerts(data);
-
     document.getElementById('kpi-overall-accuracy').textContent = fmtPct(data.overall_accuracy);
-    document.getElementById('kpi-overall-accuracy-trend').textContent =
-      data.has_data ? `Based on ${data.scans_today} scan${data.scans_today === 1 ? '' : 's'}` : 'Awaiting scans';
-
+    document.getElementById('kpi-overall-accuracy-trend').textContent = data.has_data ? `Based on ${data.scans_today} scan${data.scans_today === 1 ? '' : 's'}` : 'Awaiting scans';
     document.getElementById('kpi-last-confidence').textContent = fmtPct(data.last_scan_confidence);
-    document.getElementById('kpi-last-confidence-trend').textContent =
-      data.last_scan_confidence !== null ? 'Most recent scan' : 'No scans yet';
-
+    document.getElementById('kpi-last-confidence-trend').textContent = data.last_scan_confidence !== null ? 'Most recent scan' : 'No scans yet';
     document.getElementById('kpi-inference-speed').textContent = fmtMs(data.inference_speed_ms);
     document.getElementById('kpi-scans-today').textContent = data.scans_today.toLocaleString();
-
     document.getElementById('kpi-revenue-today').textContent = fmtMoney(data.revenue_today);
-    document.getElementById('kpi-basket-size').textContent =
-      (data.avg_basket_size === null || data.avg_basket_size === undefined) ? '--' : data.avg_basket_size;
+    document.getElementById('kpi-basket-size').textContent = (data.avg_basket_size === null || data.avg_basket_size === undefined) ? '--' : data.avg_basket_size;
     document.getElementById('kpi-transactions-today').textContent = (data.transactions_today || 0).toLocaleString();
     document.getElementById('kpi-unique-products').textContent = (data.unique_products_scanned || 0).toLocaleString();
-
-    document.getElementById('kpi-alltime-revenue').textContent = fmtMoney(data.all_time_revenue);
-    document.getElementById('kpi-alltime-transactions').textContent = (data.all_time_transactions || 0).toLocaleString();
-    document.getElementById('kpi-avg-transaction').textContent = fmtMoney(data.avg_transaction_value);
-
     document.getElementById('gauge-accuracy-value').textContent = fmtPct(data.overall_accuracy);
-    document.getElementById('accuracy-progress-fill').style.width =
-      (data.overall_accuracy || 0) + '%';
-
+    document.getElementById('accuracy-progress-fill').style.width = (data.overall_accuracy || 0) + '%';
     document.getElementById('stat-high-confidence').textContent = fmtPct(data.high_confidence_pct);
     document.getElementById('stat-low-confidence').textContent = fmtPct(data.low_confidence_pct);
-
     renderProductTable(data.products);
     renderTopRevenue(data.top_products_by_revenue);
     renderLastScan(data.last_scan_items);
     renderTelemetry(data.events);
   }
 
-  function renderModelAlerts(stats) {
-    const list = document.getElementById('alert-list');
-    const alerts = [];
-
-    if (stats && stats.products) {
-      stats.products.forEach(p => {
-        if (p.accuracy !== null && p.accuracy !== undefined && p.accuracy < 80) {
-          alerts.push({
-            level: 'danger',
-            icon: '⚠️',
-            text: `${p.name} has low detection confidence (${p.accuracy.toFixed(1)}%) — may need more training images.`
-          });
-        }
-      });
-    }
-
-    if (alerts.length === 0) {
-      list.innerHTML = '<div class="alert-item" style="color: var(--text-muted);">No alerts right now — everything looks steady.</div>';
-      return;
-    }
-
-    list.innerHTML = alerts.slice(0, 6).map(a => `
-      <div class="alert-item alert-${a.level}">
-        <span class="alert-icon">${a.icon}</span>
-        <span>${a.text}</span>
-      </div>
-    `).join('');
-  }
-
   async function refreshCatalogSize() {
     try {
       const res = await fetch('/api/products');
       const data = await res.json();
-      document.getElementById('kpi-catalog-size').textContent = (data.count || 0).toLocaleString();
-    } catch (err) {
-      console.error('Failed to load /api/products', err);
-    }
+      const el = document.getElementById('kpi-catalog-size');
+      if (el) el.textContent = (data.count || 0).toLocaleString();
+    } catch (err) {}
   }
 
   refreshStats();

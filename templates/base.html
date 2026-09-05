@@ -1,420 +1,122 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="en" class="scroll-smooth">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}ScanDesk OS - Checkout Monitoring{% endblock %}</title>
-
+  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-
-  <style>
-    :root {
-      --bg-main: #f8fafc;
-      --surface: #ffffff;
-      --border: #e2e8f0;
-      --border-focus: #cbd5e1;
-      --text-main: #0f172a;
-      --text-muted: #64748b;
-      --text-subtle: #94a3b8;
-
-      --primary: #2563eb;
-      --primary-light: #eff6ff;
-      --success: #16a34a;
-      --success-bg: #f0fdf4;
-      --warning: #d97706;
-      --warning-bg: #fffbeb;
-      --danger: #dc2626;
-      --danger-bg: #fef2f2;
-
-      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-
-      --radius-sm: 6px;
-      --radius-md: 10px;
-      --radius-lg: 14px;
-
-      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-      --font-mono: 'JetBrains Mono', monospace;
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            primary: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+          }
+        }
+      }
     }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      background-color: var(--bg-main);
-      color: var(--text-main);
-      font-family: var(--font-sans);
-      font-size: 14px;
-      line-height: 1.5;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    /* Header Styling */
-    .header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 24px;
-      height: 64px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .brand-icon {
-      width: 32px;
-      height: 32px;
-      background: var(--primary);
-      border-radius: var(--radius-sm);
-      display: grid;
-      place-items: center;
-      color: white;
-      font-weight: 700;
-    }
-
-    .brand-title {
-      font-size: 16px;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-    }
-
-    .brand-subtitle {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .nav-link {
-      font-size: 13px;
-      font-weight: 600;
-      padding: 6px 12px;
-      border-radius: 6px;
-      text-decoration: none;
-      color: var(--text-muted);
-      transition: all 0.15s ease;
-    }
-
-    .nav-link:hover {
-      color: var(--text-main);
-      background: var(--bg-main);
-    }
-
-    .nav-link.active {
-      color: var(--primary);
-      background: var(--primary-light);
-    }
-
-    .system-badge {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      background: var(--success-bg);
-      border: 1px solid rgba(22, 163, 74, 0.2);
-      border-radius: 999px;
-      color: var(--success);
-      font-weight: 600;
-      font-size: 12px;
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      background: var(--success);
-      border-radius: 50%;
-      box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.2);
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4); }
-      70% { box-shadow: 0 0 0 6px rgba(22, 163, 74, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
-    }
-
-    /* Grid & Cards */
-    .dashboard-container {
-      max-width: 1600px;
-      margin: 0 auto;
-      padding: 24px;
-      display: grid;
-      grid-template-columns: 1fr 420px;
-      gap: 24px;
-    }
-
-    @media (max-width: 1200px) {
-      .dashboard-container { grid-template-columns: 1fr; }
-    }
-
-    .main-content, .sidebar-content {
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-    }
-
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 20px;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-
-    .card-title {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text-main);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .kpi-section { margin-bottom: 20px; }
-    .kpi-section:last-child { margin-bottom: 0; }
-
-    .kpi-section-label {
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--text-subtle);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 10px;
-    }
-
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 16px;
-    }
-
-    @media (max-width: 768px) {
-      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-    }
-
-    .kpi-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 16px;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .kpi-label { font-size: 12px; color: var(--text-muted); font-weight: 500; margin-bottom: 6px; }
-    .kpi-value { font-size: 24px; font-weight: 700; font-family: var(--font-mono); letter-spacing: -0.02em; margin-bottom: 4px; }
-    .kpi-trend { font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); }
-
-    /* Camera Feed */
-    .camera-card { position: relative; overflow: hidden; }
-    .camera-viewport {
-      position: relative;
-      width: 100%;
-      height: 440px;
-      background: #0f172a;
-      border-radius: var(--radius-md);
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .camera-stream {
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .desk-surface {
-      width: 80%;
-      height: 75%;
-      border: 2px dashed rgba(255, 255, 255, 0.15);
-      border-radius: var(--radius-md);
-      position: relative;
-    }
-
-    .camera-hud {
-      position: absolute;
-      top: 12px;
-      left: 12px;
-      right: 12px;
-      display: flex;
-      justify-content: space-between;
-      pointer-events: none;
-    }
-
-    .hud-chip {
-      background: rgba(15, 23, 42, 0.75);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: white;
-      padding: 4px 10px;
-      border-radius: var(--radius-sm);
-      font-size: 11px;
-      font-family: var(--font-mono);
-    }
-
-    .btn {
-      padding: 8px 14px;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--text-main);
-      transition: all 0.15s ease;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
-    .btn-primary:hover { background: #1d4ed8; }
-
-    /* Scan List */
-    .scan-list { display: flex; flex-direction: column; gap: 10px; }
-    .scan-item { display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
-    .item-info { display: flex; align-items: center; gap: 12px; }
-    .item-thumb { width: 40px; height: 40px; background: var(--bg-main); border-radius: var(--radius-sm); display: grid; place-items: center; font-size: 18px; }
-    .item-name { font-weight: 600; font-size: 13px; }
-    .item-meta { font-size: 11px; color: var(--text-muted); }
-    .item-score { text-align: right; }
-    .score-value { font-family: var(--font-mono); font-weight: 600; font-size: 13px; }
-    .score-high { color: var(--success); }
-    .score-med { color: var(--warning); }
-    .score-low { color: var(--danger); }
-
-    /* Gauges and Tables */
-    .gauge-container { display: flex; flex-direction: column; align-items: center; padding: 16px 0; }
-    .accuracy-progress-bar { width: 100%; height: 8px; background: var(--bg-main); border-radius: 999px; overflow: hidden; margin: 12px 0 6px 0; }
-    .accuracy-progress-fill { height: 100%; background: var(--success); border-radius: 999px; transition: width 0.4s ease; }
-
-    .data-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
-    .data-table th { padding: 8px 12px; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border); }
-    .data-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
-    .data-table tr:last-child td { border-bottom: none; }
-
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; font-family: var(--font-mono); }
-    .badge-success { background: var(--success-bg); color: var(--success); }
-    .badge-warning { background: var(--warning-bg); color: var(--warning); }
-    .badge-danger { background: var(--danger-bg); color: var(--danger); }
-    .badge-neutral { background: var(--bg-main); color: var(--text-muted); }
-
-    /* AI Forecast */
-    .forecast-highlight {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 14px 16px;
-      background: linear-gradient(135deg, var(--primary-light), var(--surface));
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      margin-bottom: 16px;
-    }
-    .forecast-highlight-icon {
-      width: 36px; height: 36px; border-radius: var(--radius-sm);
-      background: var(--primary); color: white; display: grid; place-items: center; font-size: 16px; flex-shrink: 0;
-    }
-    .forecast-highlight-label { font-size: 11px; color: var(--text-muted); font-weight: 500; }
-    .forecast-highlight-value { font-size: 15px; font-weight: 700; }
-    .forecast-note { font-size: 11px; color: var(--text-subtle); margin-top: 10px; }
-
-    .alert-list { display: flex; flex-direction: column; gap: 8px; }
-    .alert-item { display: flex; gap: 8px; align-items: flex-start; padding: 10px; border-radius: var(--radius-sm); font-size: 12px; border: 1px solid var(--border); }
-    .alert-item.alert-warning { background: var(--warning-bg); border-color: rgba(217, 119, 6, 0.25); }
-    .alert-item.alert-danger { background: var(--danger-bg); border-color: rgba(220, 38, 38, 0.25); }
-    .alert-item.alert-success { background: var(--success-bg); border-color: rgba(22, 163, 74, 0.25); }
-    .alert-icon { flex-shrink: 0; }
-
-    /* Trend charts */
-    .mini-chart-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
-    @media (max-width: 900px) {
-      .mini-chart-grid { grid-template-columns: 1fr; }
-    }
-    .chart-card-value {
-      font-size: 20px;
-      font-weight: 700;
-      font-family: var(--font-mono);
-      margin-bottom: 2px;
-    }
-    .chart-card-caption {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-bottom: 10px;
-    }
-    .chart-empty {
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 12px;
-      padding: 24px 0;
-    }
-    .hbar-row { margin-bottom: 10px; }
-    .hbar-row:last-child { margin-bottom: 0; }
-    .hbar-label-row {
-      display: flex;
-      justify-content: space-between;
-      font-size: 11px;
-      margin-bottom: 4px;
-    }
-    .hbar-label-row span:first-child { color: var(--text-main); font-weight: 500; }
-    .hbar-label-row span:last-child { color: var(--text-muted); font-family: var(--font-mono); font-weight: 600; }
-    .hbar-track {
-      background: var(--bg-main);
-      border-radius: 999px;
-      height: 8px;
-      overflow: hidden;
-    }
-    .hbar-fill {
-      height: 100%;
-      border-radius: 999px;
-      background: var(--success);
-      transition: width 0.4s ease;
-    }
-  </style>
-
+  </script>
   {% block styles %}{% endblock %}
 </head>
+<body class="bg-slate-50 text-slate-900 font-sans antialiased">
+  <!-- Mobile Header -->
+  <div class="lg:hidden flex items-center justify-between p-4 bg-white border-b border-slate-200 sticky top-0 z-50">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">AI</div>
+      <span class="font-bold text-slate-800">ScanDesk</span>
+    </div>
+    <button id="mobile-menu-btn" class="p-2 text-slate-600 hover:bg-slate-100 rounded-lg">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+    </button>
+  </div>
 
-<body>
+  <div class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-slate-200 transform -translate-x-full lg:translate-x-0 transition-transform duration-200 ease-in-out flex flex-col">
+      <div class="p-6 border-b border-slate-100">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white font-bold shadow-lg shadow-primary-500/30">AI</div>
+          <div>
+            <h1 class="font-bold text-lg text-slate-900 leading-tight">ScanDesk</h1>
+            <p class="text-xs text-slate-500 font-medium">OS v2.0</p>
+          </div>
+        </div>
+      </div>
 
-  {% include 'components/header.html' %}
+      <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+        <!-- UPDATED: Using your exact endpoint names -->
+        {% set nav_items = [
+          ('dashboard', 'Dashboard', '📊'),
+          ('livecart_page', 'Live Cart', '🛒'),
+          ('products_page', 'Products', '📦'),
+          ('forecast_page', 'Forecast', '📈')
+        ] %}
+        
+        {% for id, label, icon in nav_items %}
+          <a href="{{ url_for(id) }}" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 {% if active_page == id %}bg-primary-50 text-primary-700 shadow-sm{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %}">
+            <span class="text-lg">{{ icon }}</span> {{ label }}
+          </a>
+        {% endfor %}
+        
+        {% if current_user.is_authenticated and current_user.role == 'admin' %}
+          <a href="{{ url_for('admin') }}" class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 {% if active_page == 'admin' %}bg-primary-50 text-primary-700 shadow-sm{% else %}text-slate-600 hover:bg-slate-50 hover:text-slate-900{% endif %}">
+            <span class="text-lg">⚙️</span> Admin
+          </a>
+        {% endif %}
+      </nav>
 
-  <main>
-    {% block content %}{% endblock %}
-  </main>
+      <div class="p-4 border-t border-slate-100">
+        <div class="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl">
+          <div class="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-xs">
+            {{ current_user.username[:2]|upper if current_user.is_authenticated else 'U' }}
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-slate-900 truncate">
+              {{ current_user.username if current_user.is_authenticated else 'Guest' }}
+            </p>
+            <p class="text-xs text-slate-500 capitalize">
+              {{ current_user.role if current_user.is_authenticated else 'guest' }}
+            </p>
+          </div>
+          
+          {% if current_user.is_authenticated %}
+          <a href="{{ url_for('logout') }}" class="text-slate-400 hover:text-red-600 transition-colors" title="Logout">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+          </a>
+          {% endif %}
+        </div>
+      </div>
+    </aside>
 
+    <!-- Overlay for mobile sidebar -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 hidden lg:hidden backdrop-blur-sm"></div>
+
+    <!-- Main Content -->
+    <main class="flex-1 lg:ml-64 p-4 lg:p-8 max-w-[1600px] mx-auto w-full">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <script>
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    function toggleSidebar() {
+      sidebar.classList.toggle('-translate-x-full');
+      overlay.classList.toggle('hidden');
+    }
+    if (mobileMenuBtn) {
+      mobileMenuBtn.addEventListener('click', toggleSidebar);
+      overlay.addEventListener('click', toggleSidebar);
+    }
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

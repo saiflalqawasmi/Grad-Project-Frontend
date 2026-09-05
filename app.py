@@ -475,6 +475,149 @@ def get_transactions():
     return jsonify({"transactions": db.list_transactions(limit=limit)})
 
 
+# Add these imports at the top if not already present
+import os
+import hashlib
+from werkzeug.utils import secure_filename
+
+@app.route('/products/add-scan')
+@login_required
+def add_scan_page():
+    return render_template('add_scan.html', camera_connected=is_connected())
+
+@app.route('/api/products/<product_id>/delete', methods=['POST'])
+@login_required
+def delete_product(product_id):
+    try:
+        # Delete from vectors directory
+        vectors_dir = 'vectors'
+        deleted_count = 0
+        
+        # Find and delete all files related to this product
+        for filename in os.listdir(vectors_dir):
+            if filename.startswith(f"{product_id}_") or filename == f"{product_id}.pkl":
+                filepath = os.path.join(vectors_dir, filename)
+                if os.path.isfile(filepath):
+                    os.remove(filepath)
+                    deleted_count += 1
+        
+        # Also delete from uploads if exists
+        uploads_dir = 'uploads'
+        if os.path.exists(uploads_dir):
+            for filename in os.listdir(uploads_dir):
+                if filename.startswith(f"{product_id}_"):
+                    filepath = os.path.join(uploads_dir, filename)
+                    if os.path.isfile(filepath):
+                        os.remove(filepath)
+        
+        # Remove from database if you have a products table
+        try:
+            from db import get_db
+            db = get_db()
+            db.execute('DELETE FROM products WHERE id = ?', (product_id,))
+            db.commit()
+        except:
+            pass  # Database might not exist
+        
+        return {'success': True, 'deleted_files': deleted_count}
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/api/capture-and-check', methods=['POST'])
+@login_required
+def capture_and_check():
+    """Capture a frame and check if it's a good angle for vector building"""
+    try:
+        # Capture frame from camera
+        from camera_feed import capture_frame
+        frame = capture_frame()
+        
+        if frame is None:
+            return {'error': 'Could not capture frame'}, 500
+        
+        # Run inference to check confidence
+        from inference import predict
+        result = predict(frame)
+        
+        # Check if we have a good detection
+        products = result.get('products', [])
+        good_detection = False
+        best_confidence = 0
+        best_bbox = None
+        
+        for p in products:
+            if p.get('product') != 'unknown' and p.get('confidence', 0) > 0.85:
+                good_detection = True
+                if p.get('confidence', 0) > best_confidence:
+                    best_confidence = p.get('confidence', 0)
+                    best_bbox = p.get('bbox')
+        
+        # Save the frame temporarily
+        import cv2
+        import uuid
+        temp_id = str(uuid.uuid4())[:8]
+        temp_filename = f"temp_{temp_id}.jpg"
+        temp_path = os.path.join('uploads', temp_filename)
+        cv2.imwrite(temp_path, frame)
+        
+        return {
+            'success': True,
+            'good_angle': good_detection,
+            'confidence': best_confidence,
+            'bbox': best_bbox,
+            'temp_image': temp_filename
+        }
+    except Exception as e:
+        return {'error': str(e)}, 500
+    
+    
+    
+@app.route('/api/products/new-from-captures', methods=['POST'])
+@login_required
+def add_product_from_captures():
+    """Build vectors from captured live images"""
+    try:
+        temp_images = request.form.getlist('temp_images')
+        
+        if not temp_images:
+            return {'error': 'No images provided'}, 400
+        
+        # Generate new product ID
+        import os
+        vectors_dir = 'vectors'
+        existing_ids = []
+        for filename in os.listdir(vectors_dir):
+            if filename.endswith('.pkl'):
+                try:
+                    pid = int(filename.split('_')[0])
+                    existing_ids.append(pid)
+                except:
+                    pass
+        
+        new_id = max(existing_ids, default=0) + 1
+        product_id = f"{new_id:03d}"
+        
+        # Process each captured image
+        from pipeline import build_product_vectors
+        image_paths = [os.path.join('uploads', img) for img in temp_images]
+        
+        # Build vectors
+        build_product_vectors(product_id, image_paths)
+        
+        # Clean up temp images
+        for img_path in image_paths:
+            if os.path.exists(img_path):
+                os.remove(img_path)
+        
+        return {
+            'success': True,
+            'product_id': product_id,
+            'reference_samples': len(temp_images)
+        }
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+
 if __name__ == "__main__":
     # Warm the pipeline at boot so the first request isn't slow, and so
     # missing model files fail fast instead of on first upload.

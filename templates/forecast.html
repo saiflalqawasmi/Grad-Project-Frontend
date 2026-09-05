@@ -1,81 +1,65 @@
 {% extends 'base.html' %}
-
 {% set active_page = "forecast" %}
 
 {% block content %}
-<div class="dashboard-container">
-
-  <!-- Left Main Column -->
-  <main class="main-content">
-
-    <!-- AI Sales Forecast & Restock Suggestions -->
-    <section class="card">
-      <div class="card-header">
-        <div class="card-title">
-          <span>🤖 AI Sales Forecast &amp; Restock Suggestions</span>
-        </div>
+<div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <main class="lg:col-span-2 space-y-6">
+    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      <div class="p-5 border-b border-slate-100">
+        <h2 class="font-bold text-slate-900 flex items-center gap-2"><span>🤖</span> AI Sales Forecast & Restock Suggestions</h2>
       </div>
+      
+      <div id="forecast-highlight-container" class="p-5 border-b border-slate-100"></div>
 
-      <div id="forecast-highlight-container"></div>
-
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Product</th>
-            <th>Trend</th>
-            <th>Predicted Demand (7d)</th>
-            <th>Predicted Revenue (7d)</th>
-            <th>Suggested Reorder Qty</th>
-          </tr>
-        </thead>
-        <tbody id="forecast-body">
-          <tr>
-            <td colspan="5" style="text-align: center; color: var(--text-muted);">Gathering scan data...</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div class="forecast-note">
-        Based on live scan volume (no separate sales feed exists yet) — a simple trend projection over the last 14 days, with a 7-day lead time and 25% safety buffer built into the reorder quantity. Treat as a starting estimate, not a guarantee.
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-slate-50 text-slate-500 font-semibold">
+            <tr>
+              <th class="px-5 py-3">Product</th>
+              <th class="px-5 py-3">Trend</th>
+              <th class="px-5 py-3">Predicted Demand (7d)</th>
+              <th class="px-5 py-3">Predicted Revenue (7d)</th>
+              <th class="px-5 py-3">Suggested Reorder Qty</th>
+            </tr>
+          </thead>
+          <tbody id="forecast-body" class="divide-y divide-slate-100">
+            <tr><td colspan="5" class="text-center text-slate-400 py-8">Gathering scan data...</td></tr>
+          </tbody>
+        </table>
       </div>
-    </section>
-
+      
+      <div class="p-5 bg-slate-50 border-t border-slate-100">
+        <p class="text-xs text-slate-500 leading-relaxed">
+          Based on live scan volume (no separate sales feed exists yet) — a simple trend projection over the last 14 days, with a 7-day lead time and 25% safety buffer built into the reorder quantity. Treat as a starting estimate, not a guarantee.
+        </p>
+      </div>
+    </div>
   </main>
 
-  <!-- Right Sidebar -->
-  <aside class="sidebar-content">
-
-    <!-- Demand Alerts -->
-    <section class="card">
-      <div class="card-title" style="margin-bottom: 12px;">Demand Alerts</div>
-      <div class="alert-list" id="demand-alert-list">
-        <div class="alert-item" style="color: var(--text-muted);">No alerts yet — waiting on scan data.</div>
+  <aside class="space-y-6">
+    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+      <h3 class="font-bold text-slate-900 mb-4">Demand Alerts</h3>
+      <div class="space-y-3" id="demand-alert-list">
+        <div class="text-sm text-slate-400 text-center py-4">No alerts yet — waiting on scan data.</div>
       </div>
-    </section>
+    </div>
 
-    <!-- How This Works -->
-    <section class="card">
-      <div class="card-title" style="margin-bottom: 10px;">How This Works</div>
-      <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
-        There's no separate point-of-sale history in this project, so a detection at checkout is treated as the closest thing to a sale. For each product, scans from the last 14 days are bucketed by day and fit with a simple linear trend, then projected forward 7 days. The suggested reorder quantity adds a 7-day lead time and a 25% safety buffer on top of that projection. Predicted revenue multiplies predicted demand by the price set in the Product Catalog.
-      </div>
-    </section>
-
+    <div class="bg-primary-50 rounded-2xl border border-primary-100 p-5">
+      <h3 class="font-bold text-primary-900 mb-3">How This Works</h3>
+      <p class="text-sm text-primary-800 leading-relaxed">
+        There's no separate point-of-sale history in this project, so a detection at checkout is treated as the closest thing to a sale. For each product, scans from the last 14 days are bucketed by day and fit with a simple linear trend, then projected forward 7 days. The suggested reorder quantity adds a 7-day lead time and a 25% safety buffer on top of that projection.
+      </p>
+    </div>
   </aside>
-
 </div>
 
 <script>
-  function fmtMoney(value) {
-    return (value === null || value === undefined) ? '$0.00' : '$' + value.toFixed(2);
-  }
-
+  function fmtMoney(value) { return (value === null || value === undefined) ? '$0.00' : '$' + value.toFixed(2); }
   function trendBadgeClass(trend) {
-    if (trend === 'rising') return 'badge-success';
-    if (trend === 'falling') return 'badge-danger';
-    return 'badge-neutral';
+    if (trend === 'rising') return 'bg-emerald-50 text-emerald-700 border border-emerald-100';
+    if (trend === 'falling') return 'bg-red-50 text-red-700 border border-red-100';
+    return 'bg-slate-100 text-slate-600 border border-slate-200';
   }
-
   function trendLabel(trend) {
     if (trend === 'rising') return '▲ Rising';
     if (trend === 'falling') return '▼ Falling';
@@ -84,18 +68,15 @@
 
   function renderForecastHighlight(pred) {
     const container = document.getElementById('forecast-highlight-container');
-    if (!pred.has_data || !pred.top_seller) {
-      container.innerHTML = '';
-      return;
-    }
+    if (!pred.has_data || !pred.top_seller) { container.innerHTML = ''; return; }
     const top = pred.items[0];
     const revenueText = top.predicted_revenue ? `, ~${fmtMoney(top.predicted_revenue)} predicted revenue` : '';
     container.innerHTML = `
-      <div class="forecast-highlight">
-        <div class="forecast-highlight-icon">🏆</div>
+      <div class="flex items-center gap-4 p-4 bg-gradient-to-r from-primary-50 to-white border border-primary-100 rounded-xl">
+        <div class="w-10 h-10 rounded-lg bg-primary-600 text-white flex items-center justify-center text-xl flex-shrink-0">🏆</div>
         <div>
-          <div class="forecast-highlight-label">Best-selling item (last ${pred.window_days} days)</div>
-          <div class="forecast-highlight-value">${top.name} — ${top.scans_recent} scans, ~${top.predicted_demand} predicted over next ${pred.forecast_days} days${revenueText}</div>
+          <div class="text-xs font-semibold text-primary-600 uppercase tracking-wide">Best-selling item (last ${pred.window_days} days)</div>
+          <div class="text-base font-bold text-slate-900 mt-0.5">${top.name} — ${top.scans_recent} scans, ~${top.predicted_demand} predicted over next ${pred.forecast_days} days${revenueText}</div>
         </div>
       </div>
     `;
@@ -104,16 +85,16 @@
   function renderForecastTable(pred) {
     const body = document.getElementById('forecast-body');
     if (!pred.has_data || !pred.items || pred.items.length === 0) {
-      body.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Gathering scan data...</td></tr>';
+      body.innerHTML = '<tr><td colspan="5" class="text-center text-slate-400 py-8">Gathering scan data...</td></tr>';
       return;
     }
     body.innerHTML = pred.items.map(item => `
-      <tr>
-        <td>${item.name}</td>
-        <td><span class="badge ${trendBadgeClass(item.trend)}">${trendLabel(item.trend)}</span></td>
-        <td>${item.predicted_demand}</td>
-        <td>${item.predicted_revenue ? fmtMoney(item.predicted_revenue) : '<span style="color: var(--text-subtle);">Set price</span>'}</td>
-        <td style="font-weight: 700;">${item.suggested_reorder_qty}</td>
+      <tr class="hover:bg-slate-50 transition-colors">
+        <td class="px-5 py-4 font-medium text-slate-900">${item.name}</td>
+        <td class="px-5 py-4"><span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${trendBadgeClass(item.trend)}">${trendLabel(item.trend)}</span></td>
+        <td class="px-5 py-4 font-mono text-slate-700">${item.predicted_demand}</td>
+        <td class="px-5 py-4 font-mono text-slate-700">${item.predicted_revenue ? fmtMoney(item.predicted_revenue) : '<span class="text-slate-400">Set price</span>'}</td>
+        <td class="px-5 py-4 font-mono font-bold text-primary-700">${item.suggested_reorder_qty}</td>
       </tr>
     `).join('');
   }
@@ -121,52 +102,34 @@
   function renderDemandAlerts(pred) {
     const list = document.getElementById('demand-alert-list');
     const alerts = [];
-
     if (pred.has_data) {
       pred.items.forEach(item => {
         if (item.trend === 'rising') {
-          alerts.push({
-            level: 'success',
-            icon: '📈',
-            text: `${item.name} is trending up — consider stocking ${item.suggested_reorder_qty} units.`
-          });
+          alerts.push({ level: 'success', icon: '📈', text: `<b>${item.name}</b> is trending up — consider stocking ${item.suggested_reorder_qty} units.` });
         } else if (item.trend === 'falling') {
-          alerts.push({
-            level: 'warning',
-            icon: '📉',
-            text: `${item.name} demand is dropping — consider a smaller next order.`
-          });
+          alerts.push({ level: 'warning', icon: '📉', text: `<b>${item.name}</b> demand is dropping — consider a smaller next order.` });
         }
       });
     }
-
     if (alerts.length === 0) {
-      list.innerHTML = '<div class="alert-item" style="color: var(--text-muted);">No alerts right now — everything looks steady.</div>';
+      list.innerHTML = '<div class="text-sm text-slate-400 text-center py-4">No alerts right now — everything looks steady.</div>';
       return;
     }
-
     list.innerHTML = alerts.slice(0, 8).map(a => `
-      <div class="alert-item alert-${a.level}">
-        <span class="alert-icon">${a.icon}</span>
-        <span>${a.text}</span>
+      <div class="flex gap-3 p-3 rounded-xl ${a.level === 'success' ? 'bg-emerald-50 border border-emerald-100 text-emerald-800' : 'bg-amber-50 border border-amber-100 text-amber-800'} text-sm">
+        <span class="flex-shrink-0 text-lg">${a.icon}</span>
+        <span class="leading-snug">${a.text}</span>
       </div>
     `).join('');
   }
 
   async function refreshPredictions() {
     let pred;
-    try {
-      const res = await fetch('/api/predictions');
-      pred = await res.json();
-    } catch (err) {
-      console.error('Failed to load /api/predictions', err);
-      return;
-    }
+    try { const res = await fetch('/api/predictions'); pred = await res.json(); } catch (err) { return; }
     renderForecastHighlight(pred);
     renderForecastTable(pred);
     renderDemandAlerts(pred);
   }
-
   refreshPredictions();
   setInterval(refreshPredictions, 10000);
 </script>
