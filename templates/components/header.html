@@ -12,6 +12,7 @@
         <nav style="display: flex; gap: 4px; margin-right: 12px;">
             {% if current_user.role in ['admin', 'manager'] %}
             <a href="/" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">Dashboard</a>
+            <a href="/forecast" class="nav-link {% if active_page == 'forecast' %}active{% endif %}">Forecast</a>
             <a href="/products" class="nav-link {% if active_page == 'products' %}active{% endif %}">Products</a>
             {% endif %}
             <a href="/livecart" class="nav-link {% if active_page == 'livecart' %}active{% endif %}">Live Cart</a>

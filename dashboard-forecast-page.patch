@@ -1,0 +1,1438 @@
+diff --git a/app.py b/app.py
+index a314d20..3d08704 100644
+--- a/app.py
++++ b/app.py
+@@ -9,11 +9,14 @@ from PIL import Image
+ 
+ from inference import get_pipeline, FeatureExtractor, VECTORS_DIR, ROTATION_ANGLES
+ from stats_tracker import stats, Timer
++import catalog
++import db
+ from camera_feed import (
+     connect_camera, disconnect_camera, generate_frames, get_frame_jpeg, is_connected,
+ )
+ 
+ app = Flask(__name__)
++db.init_db()
+ 
+ UPLOAD_DIR = Path(__file__).parent / "uploads"
+ UPLOAD_DIR.mkdir(exist_ok=True)
+@@ -40,6 +43,11 @@ def dashboard():
+     return render_template('dashboard.html', camera_connected=is_connected())
+ 
+ 
++@app.route("/forecast")
++def forecast_page():
++    return render_template('forecast.html')
++
++
+ @app.route("/products")
+ def products_page():
+     return render_template('products.html')
+@@ -64,12 +72,17 @@ def connect_camera_route():
+         return jsonify({"error": "camera_url is required"}), 400
+ 
+     connected = connect_camera(url)
++    if connected:
++        stats.log_event(f"CAMERA_CONNECT: linked to {url}", level="success")
++    else:
++        stats.log_event(f"CAMERA_CONNECT_FAILED: could not reach {url}", level="danger")
+     return jsonify({"connected": connected, "camera_url": url if connected else None})
+ 
+ 
+ @app.route("/disconnect_camera", methods=["POST"])
+ def disconnect_camera_route():
+     disconnect_camera()
++    stats.log_event("CAMERA_DISCONNECT: stream closed", level="warning")
+     return jsonify({"connected": False})
+ 
+ 
+@@ -116,6 +129,8 @@ def api_products():
+ 
+         products.append({
+             "id": product_id,
++            "name": catalog.get_name(product_id),
++            "price": catalog.get_price(product_id),
+             "reference_samples": data.get("num_samples", data["features"].shape[0]),
+             "embedding_dim": data["features"].shape[1],
+             "image_url": image_url,
+@@ -123,6 +138,34 @@ def api_products():
+ 
+     return jsonify({"products": products, "count": len(products)})
+ 
++
++@app.route("/api/products/<product_id>/meta", methods=["POST"])
++def update_product_meta(product_id):
++    """
++    Sets the real-world name/price for a catalog product. This is the only
++    place price data enters the system -- the vision pipeline never
++    produces one -- so it's what makes the dashboard's revenue and
++    forecast-revenue figures real rather than placeholder numbers.
++    """
++    existing_ids = [p.name.replace("_vector.pkl", "") for p in VECTORS_DIR.glob("*.pkl")]
++    if product_id not in existing_ids:
++        return jsonify({"error": f"unknown product id '{product_id}'"}), 404
++
++    payload = request.get_json(silent=True) or request.form
++    name = payload.get("name")
++    price = payload.get("price")
++
++    if price is not None:
++        try:
++            price = float(price)
++            if price < 0:
++                raise ValueError
++        except (TypeError, ValueError):
++            return jsonify({"error": "price must be a non-negative number"}), 400
++
++    entry = catalog.set_meta(product_id, price=price, name=name)
++    return jsonify({"product_id": product_id, **entry})
++
+ @app.route("/api/products/new", methods=["POST"])
+ def add_product():
+     """
+@@ -233,8 +276,14 @@ def predict():
+     try:
+         with Timer() as t:
+             result = get_pipeline().predict(temp_path)
++
++        for p in result["products"]:
++            p["name"] = catalog.get_name(p["product"])
++            p["price"] = catalog.get_price(p["product"])
++
+         stats.record(result["products"], t.elapsed_ms)
+         result["inference_ms"] = round(t.elapsed_ms, 1)
++        result["transaction_revenue"] = round(sum(p["price"] for p in result["products"]), 2)
+         return jsonify(result)
+     except Exception as e:
+         return jsonify({"error": str(e)}), 500
+@@ -248,6 +297,68 @@ def get_stats():
+     return jsonify(stats.snapshot())
+ 
+ 
++@app.route("/api/predictions", methods=["GET"])
++def get_predictions():
++    """
++    AI forecast: best-selling items + suggested reorder quantities, derived
++    from live scan volume (see StatsTracker.predictions for the method).
++    """
++    return jsonify(stats.predictions())
++
++
++@app.route("/api/timeseries", methods=["GET"])
++def get_timeseries():
++    """Real hourly/daily scan+revenue+confidence series for the dashboard's trend charts."""
++    return jsonify(stats.timeseries())
++
++
++@app.route("/api/checkout", methods=["POST"])
++def checkout():
++    """
++    Finalizes the current Live Cart into a real, persisted transaction row.
++    Prices are always looked up server-side from the catalog -- a client
++    could send any price it wants in the request body, so one from the
++    client is never trusted; only product_id + quantity are read from it.
++    """
++    payload = request.get_json(silent=True) or {}
++    cart_items = payload.get("items") or []
++
++    known_ids = {p.name.replace("_vector.pkl", "") for p in VECTORS_DIR.glob("*.pkl")}
++
++    priced_items = []
++    for entry in cart_items:
++        product_id = str(entry.get("product_id", "")).strip()
++        try:
++            quantity = int(entry.get("quantity", 0))
++        except (TypeError, ValueError):
++            quantity = 0
++        if not product_id or quantity <= 0 or product_id not in known_ids:
++            continue
++        priced_items.append({
++            "product_id": product_id,
++            "product_name": catalog.get_name(product_id),
++            "unit_price": catalog.get_price(product_id),
++            "quantity": quantity,
++        })
++
++    if not priced_items:
++        return jsonify({"error": "no valid items in cart"}), 400
++
++    txn = db.create_transaction(priced_items)
++    stats.log_event(
++        f"CHECKOUT_OK: transaction #{txn['id']}, {txn['item_count']} item(s), ${txn['total']:.2f}",
++        level="success",
++    )
++    return jsonify(txn)
++
++
++@app.route("/api/transactions", methods=["GET"])
++def get_transactions():
++    """Recent completed transactions, most recent first."""
++    limit = request.args.get("limit", default=50, type=int)
++    return jsonify({"transactions": db.list_transactions(limit=limit)})
++
++
+ if __name__ == "__main__":
+     # Warm the pipeline at boot so the first request isn't slow, and so
+     # missing model files fail fast instead of on first upload.
+diff --git a/stats_tracker.py b/stats_tracker.py
+index dd30338..d7a0102 100644
+--- a/stats_tracker.py
++++ b/stats_tracker.py
+@@ -7,11 +7,29 @@ report honestly from live traffic is detection confidence — that's what
+ "accuracy" below actually means. If you later get labeled test data, swap
+ `overall_accuracy` for a real mAP/precision figure from
+ `YOLO(...).val(data=...)` instead of this running average.
++
++Revenue and product names come from `catalog.py` (a small persisted
++price/name side-car file) for pricing detected items, but the actual
++"revenue" figures shown on the dashboard come from `db.py` -- the SQLite
++transactions table -- which only gets a row when a cashier presses Pay in
++Live Cart. A detection is not a sale; a completed checkout is. This module
++still tracks per-scan telemetry (confidence, latency, per-product scan
++counts) since none of that requires a completed transaction to be
++meaningful.
+ """
+ 
++import math
+ import threading
+ import time
+-from collections import defaultdict
++from collections import defaultdict, deque
++
++import numpy as np
++
++import catalog
++import db
++
++MAX_EVENTS = 25
++MAX_SCAN_EVENTS = 5000
+ 
+ 
+ class StatsTracker:
+@@ -19,52 +37,284 @@ class StatsTracker:
+         self._lock = threading.Lock()
+         self._all_confidences = []          # every detection's confidence, ever
+         self._inference_times_ms = []       # wall time per /predict call
+-        self._last_scan_confidences = []    # confidences from the most recent call
+         self._scan_count = 0                # number of /predict calls (a "scan")
+-        self._per_product = defaultdict(lambda: {"scans": 0, "confidences": []})
++        self._last_scan_items = []          # rich detail from the most recent /predict call
++        self._per_product = defaultdict(lambda: {"scans": 0, "confidences": [], "timestamps": []})
++        self._events = deque(maxlen=MAX_EVENTS)          # real telemetry log, newest last
++        self._scan_events = deque(maxlen=MAX_SCAN_EVENTS)  # one entry per /predict call, for trend charts
+ 
+     def record(self, products, elapsed_ms):
+         with self._lock:
++            now = time.time()
+             self._scan_count += 1
+             self._inference_times_ms.append(elapsed_ms)
+-            self._last_scan_confidences = [p["confidence"] for p in products]
++
++            last_items = []
++            scanned_value = 0.0  # catalog value of items detected this scan -- NOT revenue
+ 
+             for p in products:
+                 self._all_confidences.append(p["confidence"])
+                 entry = self._per_product[p["product"]]
+                 entry["scans"] += 1
+                 entry["confidences"].append(p["confidence"])
++                entry["timestamps"].append(now)
++
++                price = catalog.get_price(p["product"])
++                scanned_value += price
++                last_items.append({
++                    "product_id": p["product"],
++                    "name": catalog.get_name(p["product"]),
++                    "confidence": p["confidence"],
++                    "price": price,
++                    "image_url": f"/static/catalog/{p['product']}.jpg",
++                })
++
++            self._last_scan_items = last_items
++            self._scan_events.append({
++                "timestamp": now,
++                "items": len(products),
++                "avg_confidence": (sum(p["confidence"] for p in products) / len(products)) if products else None,
++            })
++            self._log(
++                f"MODEL_INFER_OK: {len(products)} item(s) detected, "
++                f"{elapsed_ms:.0f}ms, ${scanned_value:.2f} catalog value scanned",
++                level="info",
++            )
++
++    def log_event(self, message, level="info"):
++        """Lets app.py record real, non-inference telemetry (camera connect/
++        disconnect, etc.) into the same feed shown on the dashboard."""
++        with self._lock:
++            self._log(message, level)
++
++    def _log(self, message, level="info"):
++        # caller must already hold self._lock
++        self._events.append({
++            "timestamp": time.time(),
++            "message": message,
++            "level": level,
++        })
+ 
+     def snapshot(self):
+         with self._lock:
+             overall = _pct_mean(self._all_confidences)
+-            last_scan = _pct_mean(self._last_scan_confidences)
++            last_scan = _pct_mean([i["confidence"] for i in self._last_scan_items])
+             avg_speed = int(sum(self._inference_times_ms) / len(self._inference_times_ms)) \
+                 if self._inference_times_ms else None
+ 
+             high_conf = _share(self._all_confidences, lambda c: c > 0.90)
+             low_conf = _share(self._all_confidences, lambda c: c < 0.80)
+ 
++            total_items = len(self._all_confidences)
++            avg_basket_size = round(total_items / self._scan_count, 1) if self._scan_count else None
++            unique_products_scanned = len(self._per_product)
++
+             products = []
+-            for name, data in self._per_product.items():
++            for product_id, data in self._per_product.items():
+                 products.append({
+-                    "name": name,
++                    "name": catalog.get_name(product_id),
+                     "scans": data["scans"],
+                     "accuracy": _pct_mean(data["confidences"]),
+                 })
+             products.sort(key=lambda p: p["scans"], reverse=True)
+ 
++            events = [
++                {
++                    "time": time.strftime("%H:%M:%S", time.localtime(e["timestamp"])),
++                    "message": e["message"],
++                    "level": e["level"],
++                }
++                for e in reversed(self._events)
++            ]
++
++        # Revenue is read from the transactions DB (completed checkouts),
++        # outside the stats lock since it's an independent data source.
++        today_start = _start_of_today()
++        revenue_info = db.revenue_since(today_start)
++        top_products_by_revenue = db.revenue_by_product(limit=5)
++        all_time = db.all_time_summary()
++
++        return {
++            "overall_accuracy": overall,
++            "last_scan_confidence": last_scan,
++            "inference_speed_ms": avg_speed,
++            "scans_today": self._scan_count,
++            "high_confidence_pct": high_conf,
++            "low_confidence_pct": low_conf,
++            "revenue_today": revenue_info["revenue"],
++            "transactions_today": revenue_info["transaction_count"],
++            "avg_basket_size": avg_basket_size,
++            "unique_products_scanned": unique_products_scanned,
++            "all_time_revenue": all_time["revenue"],
++            "all_time_transactions": all_time["transaction_count"],
++            "avg_transaction_value": all_time["avg_transaction_value"],
++            "products": products[:8],
++            "top_products_by_revenue": top_products_by_revenue,
++            "last_scan_items": self._last_scan_items,
++            "events": events,
++            "has_data": self._scan_count > 0,
++        }
++
++    def predictions(self, window_days=14, forecast_days=7, lead_time_days=7, safety_factor=0.25):
++        """
++        Lightweight "what sells best / how much to reorder" forecast.
++
++        There's no separate POS/sales table in this project -- a detection at
++        checkout IS the closest thing we have to a sale, so scan volume is
++        used as the demand signal. For each product we bucket its scan
++        timestamps from the last `window_days` into whole days, fit a simple
++        linear trend (numpy.polyfit) across those daily counts, and project
++        it forward `forecast_days` to size a reorder quantity (with a lead
++        time + safety-stock buffer). With fewer than 2 days of data we fall
++        back to a flat daily-average projection instead of a trend line.
++
++        This is a heuristic, not a trained ML model -- it's honest about
++        that in the API response (`method`). If real sales/inventory data
++        becomes available later, swap this out for a proper time-series
++        model trained on that instead.
++        """
++        with self._lock:
++            now = time.time()
++            day_seconds = 86400.0
++            window_start = now - window_days * day_seconds
++            span_days = max(1, math.ceil((now - window_start) / day_seconds))
++
++            rows = []
++            for product_id, data in self._per_product.items():
++                ts = [t for t in data["timestamps"] if t >= window_start]
++                if not ts:
++                    continue
++
++                buckets = defaultdict(int)
++                for t in ts:
++                    day_idx = int((t - window_start) // day_seconds)
++                    buckets[day_idx] += 1
++
++                total_recent = sum(buckets.values())
++                distinct_days = len(buckets)
++
++                if distinct_days >= 2:
++                    xs = np.array(sorted(buckets.keys()), dtype=float)
++                    ys = np.array([buckets[x] for x in sorted(buckets.keys())], dtype=float)
++                    slope, intercept = np.polyfit(xs, ys, 1)
++                    projected_daily = slope * span_days + intercept
++                    # don't let a steep downward fit go negative / to zero outright
++                    projected_daily = max(projected_daily, (total_recent / span_days) * 0.25)
++                else:
++                    slope = 0.0
++                    projected_daily = total_recent / span_days
++
++                projected_daily = max(projected_daily, 0.0)
++                predicted_demand = projected_daily * forecast_days
++                reorder_qty = math.ceil(
++                    projected_daily * (forecast_days + lead_time_days) * (1 + safety_factor)
++                )
++
++                if slope > 0.15:
++                    trend = "rising"
++                elif slope < -0.15:
++                    trend = "falling"
++                else:
++                    trend = "steady"
++
++                price = catalog.get_price(product_id)
++
++                rows.append({
++                    "name": catalog.get_name(product_id),
++                    "scans_recent": total_recent,
++                    "avg_confidence": _pct_mean(data["confidences"]),
++                    "predicted_demand": round(predicted_demand, 1),
++                    "suggested_reorder_qty": max(reorder_qty, 1),
++                    "predicted_revenue": round(predicted_demand * price, 2),
++                    "trend": trend,
++                })
++
++            rows.sort(key=lambda r: r["scans_recent"], reverse=True)
++
+             return {
+-                "overall_accuracy": overall,
+-                "last_scan_confidence": last_scan,
+-                "inference_speed_ms": avg_speed,
+-                "scans_today": self._scan_count,
+-                "high_confidence_pct": high_conf,
+-                "low_confidence_pct": low_conf,
+-                "products": products[:8],
+-                "has_data": self._scan_count > 0,
++                "method": "scan_volume_linear_trend",
++                "window_days": window_days,
++                "forecast_days": forecast_days,
++                "lead_time_days": lead_time_days,
++                "items": rows[:10],
++                "top_seller": rows[0]["name"] if rows else None,
++                "has_data": len(rows) > 0,
+             }
+ 
++    def timeseries(self, hours=24, days=7):
++        """
++        Real hour-by-hour and day-by-day series for the trend charts on the
++        dashboard. Scan volume and confidence come from per-scan telemetry
++        (no synthetic/sample data); revenue comes from the transactions DB
++        (completed checkouts only) bucketed into the same windows. Buckets
++        with no activity simply report 0 -- they are not backfilled or
++        smoothed.
++        """
++        with self._lock:
++            now = time.time()
++            hour_seconds = 3600.0
++            day_seconds = 86400.0
++
++            hour_start = now - hours * hour_seconds
++            hourly = [{"scans": 0} for _ in range(hours)]
++
++            day_start = now - days * day_seconds
++            daily = [{"scans": 0, "confidences": []} for _ in range(days)]
++
++            for e in self._scan_events:
++                if e["timestamp"] >= hour_start:
++                    idx = min(hours - 1, int((e["timestamp"] - hour_start) // hour_seconds))
++                    hourly[idx]["scans"] += e["items"]
++
++                if e["timestamp"] >= day_start:
++                    idx = min(days - 1, int((e["timestamp"] - day_start) // day_seconds))
++                    daily[idx]["scans"] += e["items"]
++                    if e["avg_confidence"] is not None:
++                        daily[idx]["confidences"].append(e["avg_confidence"])
++
++            has_scan_data = len(self._scan_events) > 0
++
++        # Revenue comes from completed transactions, bucketed the same way,
++        # outside the stats lock since it's an independent data source.
++        hourly_revenue = [0.0] * hours
++        daily_revenue = [0.0] * days
++        transaction_totals = db.all_transaction_totals()
++        for txn_time, total in transaction_totals:
++            if txn_time >= hour_start:
++                idx = min(hours - 1, int((txn_time - hour_start) // hour_seconds))
++                hourly_revenue[idx] += total
++            if txn_time >= day_start:
++                idx = min(days - 1, int((txn_time - day_start) // day_seconds))
++                daily_revenue[idx] += total
++
++        hourly_labels = [
++            time.strftime("%H:00", time.localtime(hour_start + i * hour_seconds))
++            for i in range(hours)
++        ]
++        daily_labels = [
++            time.strftime("%a", time.localtime(day_start + i * day_seconds))
++            for i in range(days)
++        ]
++
++        return {
++            "hourly": {
++                "labels": hourly_labels,
++                "scans": [b["scans"] for b in hourly],
++                "revenue": [round(v, 2) for v in hourly_revenue],
++            },
++            "daily": {
++                "labels": daily_labels,
++                "scans": [b["scans"] for b in daily],
++                "revenue": [round(v, 2) for v in daily_revenue],
++                "avg_confidence": [
++                    round(100 * sum(b["confidences"]) / len(b["confidences"]), 1)
++                    if b["confidences"] else None
++                    for b in daily
++                ],
++            },
++            "has_data": has_scan_data or len(transaction_totals) > 0,
++        }
++
+ 
+ def _pct_mean(values):
+     if not values:
+@@ -78,6 +328,13 @@ def _share(values, predicate):
+     return round(100 * sum(1 for v in values if predicate(v)) / len(values), 1)
+ 
+ 
++def _start_of_today():
++    """Unix timestamp for local midnight -- the boundary for 'revenue today'."""
++    now = time.localtime()
++    start = time.struct_time((now.tm_year, now.tm_mon, now.tm_mday, 0, 0, 0, 0, 0, now.tm_isdst))
++    return time.mktime(start)
++
++
+ class Timer:
+     """Small context manager so app.py doesn't need to import `time` itself."""
+ 
+diff --git a/templates/base.html b/templates/base.html
+index 541f3f1..e2b6819 100644
+--- a/templates/base.html
++++ b/templates/base.html
+@@ -298,6 +298,7 @@
+     .score-value { font-family: var(--font-mono); font-weight: 600; font-size: 13px; }
+     .score-high { color: var(--success); }
+     .score-med { color: var(--warning); }
++    .score-low { color: var(--danger); }
+ 
+     /* Gauges and Tables */
+     .gauge-container { display: flex; flex-direction: column; align-items: center; padding: 16px 0; }
+@@ -313,6 +314,82 @@
+     .badge-success { background: var(--success-bg); color: var(--success); }
+     .badge-warning { background: var(--warning-bg); color: var(--warning); }
+     .badge-danger { background: var(--danger-bg); color: var(--danger); }
++    .badge-neutral { background: var(--bg-main); color: var(--text-muted); }
++
++    /* AI Forecast */
++    .forecast-highlight {
++      display: flex;
++      align-items: center;
++      gap: 12px;
++      padding: 14px 16px;
++      background: linear-gradient(135deg, var(--primary-light), var(--surface));
++      border: 1px solid var(--border);
++      border-radius: var(--radius-md);
++      margin-bottom: 16px;
++    }
++    .forecast-highlight-icon {
++      width: 36px; height: 36px; border-radius: var(--radius-sm);
++      background: var(--primary); color: white; display: grid; place-items: center; font-size: 16px; flex-shrink: 0;
++    }
++    .forecast-highlight-label { font-size: 11px; color: var(--text-muted); font-weight: 500; }
++    .forecast-highlight-value { font-size: 15px; font-weight: 700; }
++    .forecast-note { font-size: 11px; color: var(--text-subtle); margin-top: 10px; }
++
++    .alert-list { display: flex; flex-direction: column; gap: 8px; }
++    .alert-item { display: flex; gap: 8px; align-items: flex-start; padding: 10px; border-radius: var(--radius-sm); font-size: 12px; border: 1px solid var(--border); }
++    .alert-item.alert-warning { background: var(--warning-bg); border-color: rgba(217, 119, 6, 0.25); }
++    .alert-item.alert-danger { background: var(--danger-bg); border-color: rgba(220, 38, 38, 0.25); }
++    .alert-item.alert-success { background: var(--success-bg); border-color: rgba(22, 163, 74, 0.25); }
++    .alert-icon { flex-shrink: 0; }
++
++    /* Trend charts */
++    .mini-chart-grid {
++      display: grid;
++      grid-template-columns: 1fr 1fr;
++      gap: 16px;
++    }
++    @media (max-width: 900px) {
++      .mini-chart-grid { grid-template-columns: 1fr; }
++    }
++    .chart-card-value {
++      font-size: 20px;
++      font-weight: 700;
++      font-family: var(--font-mono);
++      margin-bottom: 2px;
++    }
++    .chart-card-caption {
++      font-size: 11px;
++      color: var(--text-muted);
++      margin-bottom: 10px;
++    }
++    .chart-empty {
++      text-align: center;
++      color: var(--text-muted);
++      font-size: 12px;
++      padding: 24px 0;
++    }
++    .hbar-row { margin-bottom: 10px; }
++    .hbar-row:last-child { margin-bottom: 0; }
++    .hbar-label-row {
++      display: flex;
++      justify-content: space-between;
++      font-size: 11px;
++      margin-bottom: 4px;
++    }
++    .hbar-label-row span:first-child { color: var(--text-main); font-weight: 500; }
++    .hbar-label-row span:last-child { color: var(--text-muted); font-family: var(--font-mono); font-weight: 600; }
++    .hbar-track {
++      background: var(--bg-main);
++      border-radius: 999px;
++      height: 8px;
++      overflow: hidden;
++    }
++    .hbar-fill {
++      height: 100%;
++      border-radius: 999px;
++      background: var(--success);
++      transition: width 0.4s ease;
++    }
+   </style>
+ 
+   {% block styles %}{% endblock %}
+diff --git a/templates/components/header.html b/templates/components/header.html
+index 1a49e6c..9d38d16 100644
+--- a/templates/components/header.html
++++ b/templates/components/header.html
+@@ -9,9 +9,9 @@
+ 
+     <div class="header-actions">
+         <nav style="display: flex; gap: 4px; margin-right: 12px;">
+-            <a href="/products" class="nav-link {% if active_page == 'products' %}active{% endif %}">Branches</a>
+             <a href="/" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">Dashboard</a>
+             <a href="/livecart" class="nav-link {% if active_page == 'livecart' %}active{% endif %}">Live Cart</a>
++            <a href="/forecast" class="nav-link {% if active_page == 'forecast' %}active{% endif %}">Forecast</a>
+             <a href="/products" class="nav-link {% if active_page == 'products' %}active{% endif %}">All Products</a>
+         </nav>
+         <div class="system-badge">
+diff --git a/templates/dashboard.html b/templates/dashboard.html
+index 784b2b6..ee2794a 100644
+--- a/templates/dashboard.html
++++ b/templates/dashboard.html
+@@ -1,4 +1,5 @@
+ {% extends 'base.html' %}
++{% set active_page = "dashboard" %}
+ 
+ {% block content %}
+ <div class="dashboard-container">
+@@ -28,6 +29,26 @@
+         <div class="kpi-value" id="kpi-scans-today">0</div>
+         <div class="kpi-trend trend-neutral" id="kpi-scans-trend">Since page load</div>
+       </div>
++      <div class="kpi-card">
++        <div class="kpi-label">Revenue Today</div>
++        <div class="kpi-value" id="kpi-revenue-today">$0.00</div>
++        <div class="kpi-trend trend-neutral" id="kpi-revenue-trend">From completed transactions</div>
++      </div>
++      <div class="kpi-card">
++        <div class="kpi-label">Avg Basket Size</div>
++        <div class="kpi-value" id="kpi-basket-size">--</div>
++        <div class="kpi-trend trend-neutral">Items per scan</div>
++      </div>
++      <div class="kpi-card">
++        <div class="kpi-label">All-Time Revenue</div>
++        <div class="kpi-value" id="kpi-alltime-revenue">$0.00</div>
++        <div class="kpi-trend trend-neutral" id="kpi-alltime-revenue-trend">Lifetime, all transactions</div>
++      </div>
++      <div class="kpi-card">
++        <div class="kpi-label">Total Transactions</div>
++        <div class="kpi-value" id="kpi-alltime-transactions">0</div>
++        <div class="kpi-trend trend-neutral" id="kpi-avg-txn-value">Avg: $0.00 / order</div>
++      </div>
+     </div>
+ 
+     <!-- Live Camera Viewport Box -->
+@@ -59,58 +80,43 @@
+       </div>
+     </section>
+ 
++    <!-- Trend Charts: Revenue (bar) + Scan Activity (area line) -->
++    <div class="mini-chart-grid">
++      <section class="card">
++        <div class="card-title" style="margin-bottom: 4px;">📊 Revenue Trend (7 Days)</div>
++        <div class="chart-card-value" id="chart-revenue-total">$0.00</div>
++        <div class="chart-card-caption" id="chart-revenue-caption">Total across the last 7 days</div>
++        <div id="chart-revenue-container"></div>
++      </section>
++
++      <section class="card">
++        <div class="card-title" style="margin-bottom: 4px;">📈 Scan Activity (24h)</div>
++        <div class="chart-card-value" id="chart-activity-total">0</div>
++        <div class="chart-card-caption" id="chart-activity-caption">Items detected per hour</div>
++        <div id="chart-activity-container"></div>
++      </section>
++    </div>
++
+     <!-- Last Scan Item Breakdown -->
+     <section class="card">
+       <div class="card-header">
+-        <div class="card-title">Last Scan Results (Transaction #8839)</div>
+-        <button class="btn" style="font-size: 11px; padding: 4px 8px;">View Full History</button>
++        <div class="card-title" id="last-scan-title">Last Scan Results</div>
+       </div>
+ 
+-      <div class="scan-list">
+-        <div class="scan-item">
+-          <div class="item-info">
+-            <div class="item-thumb">🥛</div>
+-            <div>
+-              <div class="item-name">Whole Milk 1L</div>
+-              <div class="item-meta">SKU: 4011-8832 | Packaged</div>
+-            </div>
+-          </div>
+-          <div class="item-score">
+-            <div class="score-value score-high">99.4%</div>
+-            <div class="item-meta">Class: High Confidence</div>
+-          </div>
+-        </div>
+-
+-        <div class="scan-item">
+-          <div class="item-info">
+-            <div class="item-thumb">🍎</div>
+-            <div>
+-              <div class="item-name">Organic Gala Apple</div>
+-              <div class="item-meta">SKU: 3110-9921 | Produce (Weight: 180g)</div>
+-            </div>
+-          </div>
+-          <div class="item-score">
+-            <div class="score-value score-high">98.7%</div>
+-            <div class="item-meta">Class: High Confidence</div>
+-          </div>
+-        </div>
+-
+-        <div class="scan-item">
+-          <div class="item-info">
+-            <div class="item-thumb">🍞</div>
+-            <div>
+-              <div class="item-name">Sourdough Artisan Bread</div>
+-              <div class="item-meta">SKU: 1002-4412 | Bakery (Unpackaged)</div>
+-            </div>
+-          </div>
+-          <div class="item-score">
+-            <div class="score-value score-med">84.1%</div>
+-            <div class="item-meta">Class: Attention Required</div>
+-          </div>
+-        </div>
++      <div class="scan-list" id="last-scan-list">
++        <div style="text-align: center; color: var(--text-muted); padding: 20px 0; font-size: 13px;">No scans yet — run a scan to see live results here.</div>
+       </div>
+     </section>
+ 
++    <!-- Pointer to the dedicated Forecast page -->
++    <a href="/forecast" class="card" style="display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit;">
++      <div style="width: 40px; height: 40px; border-radius: var(--radius-sm); background: var(--primary); color: white; display: grid; place-items: center; font-size: 18px; flex-shrink: 0;">🤖</div>
++      <div>
++        <div style="font-weight: 700; font-size: 14px;">AI Sales Forecast &amp; Restock Suggestions</div>
++        <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">Best sellers, demand trend, and suggested reorder quantities — now on the Forecast page →</div>
++      </div>
++    </a>
++
+   </main>
+ 
+   <!-- Right Sidebar Statistics Column -->
+@@ -146,6 +152,38 @@
+       </div>
+     </section>
+ 
++    <!-- Confidence Trend -->
++    <section class="card">
++      <div class="card-title" style="margin-bottom: 4px;">🎯 Confidence Trend (7 Days)</div>
++      <div class="chart-card-caption">Daily average detection confidence</div>
++      <div id="chart-confidence-container"></div>
++    </section>
++
++    <!-- Top Products by Revenue -->
++    <section class="card">
++      <div class="card-title" style="margin-bottom: 12px;">🏅 Top Products by Revenue</div>
++      <div id="chart-top-revenue-container"></div>
++    </section>
++
++    <!-- Store Snapshot -->
++    <section class="card">
++      <div class="card-title" style="margin-bottom: 12px;">Store Snapshot</div>
++      <div style="display: flex; flex-direction: column; gap: 10px; font-size: 12px;">
++        <div style="display: flex; justify-content: space-between;">
++          <span style="color: var(--text-muted);">Products in Catalog:</span>
++          <span style="font-weight: 600;" id="snap-catalog-size">--</span>
++        </div>
++        <div style="display: flex; justify-content: space-between;">
++          <span style="color: var(--text-muted);">Products Scanned At Least Once:</span>
++          <span style="font-weight: 600;" id="snap-products-scanned">--</span>
++        </div>
++        <div style="display: flex; justify-content: space-between;">
++          <span style="color: var(--text-muted);">Avg Transaction Value:</span>
++          <span style="font-weight: 600;" id="snap-avg-txn">--</span>
++        </div>
++      </div>
++    </section>
++
+     <!-- Product Performance -->
+     <section class="card">
+       <div class="card-title" style="margin-bottom: 12px;">Product Performance</div>
+@@ -166,13 +204,19 @@
+       </table>
+     </section>
+ 
++    <!-- Model Alerts -->
++    <section class="card">
++      <div class="card-title" style="margin-bottom: 12px;">Model Alerts</div>
++      <div class="alert-list" id="alert-list">
++        <div class="alert-item" style="color: var(--text-muted);">No alerts yet — waiting on scan data.</div>
++      </div>
++    </section>
++
+     <!-- Telemetry Log -->
+     <section class="card">
+       <div class="card-title" style="margin-bottom: 8px;">Real-time Telemetry</div>
+-      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px;">
+-        <div>[14:23:01] MODEL_INFER_OK: Desk #04 (3 items, 112ms)</div>
+-        <div>[14:22:45] LIGHT_NORM: Ambient light exposure stable</div>
+-        <div>[14:21:10] CAMERA_CHECK: Frame rate stable at 60 FPS</div>
++      <div id="telemetry-log" style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto;">
++        <div>Waiting for activity...</div>
+       </div>
+     </section>
+ 
+@@ -185,6 +229,139 @@
+     return (value === null || value === undefined) ? '--%' : value.toFixed(1) + '%';
+   }
+ 
++  function fmtMoney(value) {
++    return (value === null || value === undefined) ? '$0.00' : '$' + value.toFixed(2);
++  }
++
++  // ---- Lightweight inline SVG chart helpers (no external chart library) ----
++
++  function svgBarChart(labels, values, color) {
++    const w = 300, h = 110, padTop = 8, padBottom = 18, padSide = 6;
++    const max = Math.max(...values, 1);
++    const innerW = w - padSide * 2;
++    const gap = innerW / values.length;
++    const barWidth = Math.max(6, gap * 0.55);
++
++    let bars = '';
++    values.forEach((v, i) => {
++      const barHeight = (v / max) * (h - padTop - padBottom);
++      const x = padSide + i * gap + (gap - barWidth) / 2;
++      const y = h - padBottom - barHeight;
++      bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${Math.max(barHeight, 1).toFixed(1)}" rx="3" style="fill:${color};"></rect>`;
++    });
++
++    let tickLabels = '';
++    labels.forEach((l, i) => {
++      const x = padSide + i * gap + gap / 2;
++      tickLabels += `<text x="${x.toFixed(1)}" y="${h - 4}" text-anchor="middle" font-size="9" style="fill:var(--text-subtle);">${l}</text>`;
++    });
++
++    return `<svg viewBox="0 0 ${w} ${h}" style="width:100%; height:${h}px; display:block;">${bars}${tickLabels}</svg>`;
++  }
++
++  function svgLineChart(labels, values, color, opts) {
++    opts = opts || {};
++    const w = 300, h = 100, padTop = 10, padBottom = 18, padSide = 6;
++    const cleanValues = values.map(v => (v === null || v === undefined) ? 0 : v);
++    const max = Math.max(...cleanValues, opts.minMax || 1);
++    const min = opts.zeroFloor === false ? Math.min(...cleanValues) : 0;
++    const range = (max - min) || 1;
++    const innerW = w - padSide * 2;
++    const stepX = values.length > 1 ? innerW / (values.length - 1) : 0;
++
++    const points = cleanValues.map((v, i) => {
++      const x = padSide + i * stepX;
++      const y = h - padBottom - ((v - min) / range) * (h - padTop - padBottom);
++      return [x, y];
++    });
++
++    const polyline = points.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
++    let area = '';
++    if (opts.area) {
++      const areaPath = `M${points[0][0].toFixed(1)},${(h - padBottom).toFixed(1)} L` +
++        points.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' L') +
++        ` L${points[points.length - 1][0].toFixed(1)},${(h - padBottom).toFixed(1)} Z`;
++      area = `<path d="${areaPath}" style="fill:${color}; opacity:0.14;"></path>`;
++    }
++    let dots = '';
++    if (opts.dots) {
++      dots = points.map((p, i) => values[i] === null
++        ? ''
++        : `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.5" style="fill:${color};"></circle>`
++      ).join('');
++    }
++
++    let tickLabels = '';
++    labels.forEach((l, i) => {
++      if (labels.length > 10 && i % Math.ceil(labels.length / 8) !== 0) return;
++      tickLabels += `<text x="${points[i][0].toFixed(1)}" y="${h - 4}" text-anchor="middle" font-size="9" style="fill:var(--text-subtle);">${l}</text>`;
++    });
++
++    return `<svg viewBox="0 0 ${w} ${h}" style="width:100%; height:${h}px; display:block;">
++      ${area}
++      <polyline points="${polyline}" style="fill:none; stroke:${color}; stroke-width:2;"></polyline>
++      ${dots}
++      ${tickLabels}
++    </svg>`;
++  }
++
++  function renderHBarChart(containerId, items, opts) {
++    opts = opts || {};
++    const container = document.getElementById(containerId);
++    if (!items || items.length === 0) {
++      container.innerHTML = `<div class="chart-empty">${opts.emptyText || 'No data yet'}</div>`;
++      return;
++    }
++    const max = Math.max(...items.map(i => i.value), 1);
++    container.innerHTML = items.map(i => `
++      <div class="hbar-row">
++        <div class="hbar-label-row"><span>${i.label}</span><span>${i.display}</span></div>
++        <div class="hbar-track"><div class="hbar-fill" style="width:${(i.value / max * 100).toFixed(1)}%;"></div></div>
++      </div>
++    `).join('');
++  }
++
++  function renderTrendCharts(ts) {
++    const revContainer = document.getElementById('chart-revenue-container');
++    const actContainer = document.getElementById('chart-activity-container');
++    const confContainer = document.getElementById('chart-confidence-container');
++
++    if (!ts.has_data) {
++      revContainer.innerHTML = '<div class="chart-empty">No scans yet</div>';
++      actContainer.innerHTML = '<div class="chart-empty">No scans yet</div>';
++      confContainer.innerHTML = '<div class="chart-empty">No scans yet</div>';
++      return;
++    }
++
++    const dailyRevenueTotal = ts.daily.revenue.reduce((a, b) => a + b, 0);
++    document.getElementById('chart-revenue-total').textContent = fmtMoney(dailyRevenueTotal);
++    revContainer.innerHTML = svgBarChart(ts.daily.labels, ts.daily.revenue, 'var(--primary)');
++
++    const hourlyScanTotal = ts.hourly.scans.reduce((a, b) => a + b, 0);
++    document.getElementById('chart-activity-total').textContent = hourlyScanTotal.toLocaleString();
++    actContainer.innerHTML = svgLineChart(ts.hourly.labels, ts.hourly.scans, 'var(--success)', { area: true });
++
++    confContainer.innerHTML = svgLineChart(ts.daily.labels, ts.daily.avg_confidence, 'var(--warning)', { dots: true, minMax: 100, zeroFloor: false });
++  }
++
++  function renderTopRevenue(topProducts) {
++    const items = (topProducts || [])
++      .map(p => ({ label: p.name, value: p.revenue, display: fmtMoney(p.revenue) }));
++    renderHBarChart('chart-top-revenue-container', items, { emptyText: 'No completed transactions yet — use Pay in Live Cart' });
++  }
++
++  async function refreshTimeseries() {
++    let ts;
++    try {
++      const res = await fetch('/api/timeseries');
++      ts = await res.json();
++    } catch (err) {
++      console.error('Failed to load /api/timeseries', err);
++      return;
++    }
++    renderTrendCharts(ts);
++  }
++
+   function fmtMs(value) {
+     return (value === null || value === undefined) ? '--ms' : Math.round(value) + 'ms';
+   }
+@@ -196,6 +373,55 @@
+     return 'badge-danger';
+   }
+ 
++  function scoreClass(confidencePct) {
++    if (confidencePct >= 90) return 'score-high';
++    if (confidencePct >= 80) return 'score-med';
++    return 'score-low';
++  }
++
++  function renderLastScan(items) {
++    const list = document.getElementById('last-scan-list');
++    const title = document.getElementById('last-scan-title');
++    if (!items || items.length === 0) {
++      list.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px 0; font-size: 13px;">No scans yet — run a scan to see live results here.</div>';
++      title.textContent = 'Last Scan Results';
++      return;
++    }
++
++    const total = items.reduce((sum, i) => sum + (i.price || 0), 0);
++    title.textContent = `Last Scan Results (${items.length} item${items.length === 1 ? '' : 's'}, ${fmtMoney(total)})`;
++
++    list.innerHTML = items.map(item => {
++      const confPct = item.confidence * 100;
++      return `
++        <div class="scan-item">
++          <div class="item-info">
++            <img class="item-thumb" src="${item.image_url}" alt="${item.name}"
++              style="object-fit: cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';">
++            <div class="item-thumb" style="display: none;">📦</div>
++            <div>
++              <div class="item-name">${item.name}</div>
++              <div class="item-meta">ID: ${item.product_id}${item.price ? ' | ' + fmtMoney(item.price) : ' | Price not set'}</div>
++            </div>
++          </div>
++          <div class="item-score">
++            <div class="score-value ${scoreClass(confPct)}">${confPct.toFixed(1)}%</div>
++            <div class="item-meta">${confPct >= 90 ? 'High Confidence' : confPct >= 80 ? 'Medium Confidence' : 'Attention Required'}</div>
++          </div>
++        </div>
++      `;
++    }).join('');
++  }
++
++  function renderTelemetry(events) {
++    const log = document.getElementById('telemetry-log');
++    if (!events || events.length === 0) {
++      log.innerHTML = '<div>Waiting for activity...</div>';
++      return;
++    }
++    log.innerHTML = events.map(e => `<div>[${e.time}] ${e.message}</div>`).join('');
++  }
++
+   function renderProductTable(products) {
+     const body = document.getElementById('product-performance-body');
+     if (!products || products.length === 0) {
+@@ -232,6 +458,14 @@
+     document.getElementById('kpi-inference-speed').textContent = fmtMs(data.inference_speed_ms);
+     document.getElementById('kpi-scans-today').textContent = data.scans_today.toLocaleString();
+ 
++    document.getElementById('kpi-revenue-today').textContent = fmtMoney(data.revenue_today);
++    document.getElementById('kpi-basket-size').textContent =
++      (data.avg_basket_size === null || data.avg_basket_size === undefined) ? '--' : data.avg_basket_size;
++
++    document.getElementById('kpi-alltime-revenue').textContent = fmtMoney(data.all_time_revenue);
++    document.getElementById('kpi-alltime-transactions').textContent = (data.all_time_transactions || 0).toLocaleString();
++    document.getElementById('kpi-avg-txn-value').textContent = `Avg: ${fmtMoney(data.avg_transaction_value)} / order`;
++
+     document.getElementById('gauge-accuracy-value').textContent = fmtPct(data.overall_accuracy);
+     document.getElementById('accuracy-progress-fill').style.width =
+       (data.overall_accuracy || 0) + '%';
+@@ -239,10 +473,61 @@
+     document.getElementById('stat-high-confidence').textContent = fmtPct(data.high_confidence_pct);
+     document.getElementById('stat-low-confidence').textContent = fmtPct(data.low_confidence_pct);
+ 
++    document.getElementById('snap-products-scanned').textContent = (data.unique_products_scanned || 0).toLocaleString();
++    document.getElementById('snap-avg-txn').textContent = fmtMoney(data.avg_transaction_value);
++
+     renderProductTable(data.products);
++    renderTopRevenue(data.top_products_by_revenue);
++    renderLastScan(data.last_scan_items);
++    renderTelemetry(data.events);
++    renderModelAlerts(data);
++  }
++
++  async function refreshCatalogSize() {
++    try {
++      const res = await fetch('/api/products');
++      const data = await res.json();
++      document.getElementById('snap-catalog-size').textContent = (data.count || 0).toLocaleString();
++    } catch (err) {
++      console.error('Failed to load /api/products', err);
++    }
++  }
++
++
++  function renderModelAlerts(stats) {
++    const list = document.getElementById('alert-list');
++    const alerts = [];
++
++    if (stats && stats.products) {
++      stats.products.forEach(p => {
++        if (p.accuracy !== null && p.accuracy !== undefined && p.accuracy < 80) {
++          alerts.push({
++            level: 'danger',
++            icon: '⚠️',
++            text: `${p.name} has low detection confidence (${p.accuracy.toFixed(1)}%) — may need more training images.`
++          });
++        }
++      });
++    }
++
++    if (alerts.length === 0) {
++      list.innerHTML = '<div class="alert-item" style="color: var(--text-muted);">No alerts right now — everything looks steady.</div>';
++      return;
++    }
++
++    list.innerHTML = alerts.slice(0, 6).map(a => `
++      <div class="alert-item alert-${a.level}">
++        <span class="alert-icon">${a.icon}</span>
++        <span>${a.text}</span>
++      </div>
++    `).join('');
+   }
+ 
+   refreshStats();
++  refreshTimeseries();
++  refreshCatalogSize();
+   setInterval(refreshStats, 5000);
++  setInterval(refreshTimeseries, 15000);
++  setInterval(refreshCatalogSize, 60000);
+ </script>
+ {% endblock %}
+diff --git a/templates/livecart.html b/templates/livecart.html
+index bdf17c2..cb2a624 100644
+--- a/templates/livecart.html
++++ b/templates/livecart.html
+@@ -273,8 +273,10 @@
+         <div class="cart-summary">
+           <span>Unique items: <b id="cart-unique-count">0</b></span>
+           <span>Total units: <b id="cart-total-count">0</b></span>
++          <span>Total: <b id="cart-total-price">$0.00</b></span>
+         </div>
+         <button id="print-receipt-btn" class="btn">🧾 Print Receipt</button>
++        <button id="pay-btn" class="btn btn-primary" disabled>💳 Pay</button>
+       </div>
+     </div>
+ 
+@@ -324,6 +326,7 @@
+       hudInference: document.getElementById('hud-inference-status'),
+       hudCameraName: document.getElementById('hud-camera-name'),
+       printReceiptBtn: document.getElementById('print-receipt-btn'),
++      payBtn: document.getElementById('pay-btn'),
+       viewport: document.getElementById('viewport')
+     };
+ 
+@@ -335,6 +338,7 @@
+     if (dom.scanNowBtn) dom.scanNowBtn.addEventListener('click', scanNow);
+     if (dom.autoScanBtn) dom.autoScanBtn.addEventListener('click', onToggleAutoScan);
+     if (dom.printReceiptBtn) dom.printReceiptBtn.addEventListener('click', onPrintReceipt);
++    if (dom.payBtn) dom.payBtn.addEventListener('click', onPay);
+     if (dom.clearCartBtn) dom.clearCartBtn.addEventListener('click', () => {
+       cart = {};
+       pendingCounts = {};
+@@ -816,15 +820,22 @@
+     }
+ 
+     let totalUnits = 0;
++    let totalPrice = 0;
+     const rows = ids.map(id => {
+       const item = cart[id];
++      const catalogEntry = productCatalog[id];
++      const price = (catalogEntry && catalogEntry.price) || 0;
++      const name = (catalogEntry && catalogEntry.name && catalogEntry.name !== id) ? catalogEntry.name : `#${id}`;
++      const lineTotal = price * item.count;
+       totalUnits += item.count;
++      totalPrice += lineTotal;
+       const confPct = (item.bestConfidence * 100).toFixed(1);
+       return `
+         <tr>
+-          <td>#${id}</td>
++          <td>${name}</td>
+           <td style="text-align:center;">${item.count}</td>
+-          <td style="text-align:right;">${confPct}%</td>
++          <td style="text-align:right;">${fmtMoney(price)}</td>
++          <td style="text-align:right;">${fmtMoney(lineTotal)}</td>
+         </tr>`;
+     }).join('');
+ 
+@@ -832,28 +843,27 @@
+ <html>
+ <head>
+ <meta charset="utf-8">
+-<title>Receipt — ScanDesk OS</title>
++<title>Receipt Preview — ScanDesk OS</title>
+ <style>
+-  body { font-family: 'Courier New', monospace; max-width: 320px; margin: 24px auto; color: #111; }
++  body { font-family: 'Courier New', monospace; max-width: 340px; margin: 24px auto; color: #111; }
+   h1 { font-size: 16px; text-align: center; margin-bottom: 0; }
+   .sub { text-align: center; font-size: 11px; color: #555; margin-top: 4px; }
+   table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+   th, td { padding: 4px 2px; border-bottom: 1px dashed #999; }
+   th { text-align: left; font-size: 11px; text-transform: uppercase; color: #555; }
+-  .totals { margin-top: 12px; font-size: 13px; display: flex; justify-content: space-between; font-weight: bold; border-top: 1px solid #333; padding-top: 8px; }
++  .totals { margin-top: 12px; font-size: 15px; display: flex; justify-content: space-between; font-weight: bold; border-top: 1px solid #333; padding-top: 8px; }
+   .note { margin-top: 20px; font-size: 10px; color: #777; text-align: center; }
+ </style>
+ </head>
+ <body>
+   <h1>ScanDesk OS</h1>
+-  <div class="sub">${new Date().toLocaleString()}</div>
++  <div class="sub">Preview · ${new Date().toLocaleString()}</div>
+   <table>
+-    <thead><tr><th>Item</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Best Match</th></tr></thead>
++    <thead><tr><th>Item</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Price</th><th style="text-align:right;">Total</th></tr></thead>
+     <tbody>${rows}</tbody>
+   </table>
+-  <div class="totals"><span>Unique items</span><span>${ids.length}</span></div>
+-  <div class="totals"><span>Total units</span><span>${totalUnits}</span></div>
+-  <div class="note">Online receipt — pricing isn't tracked in the catalog yet.</div>
++  <div class="totals"><span>Total</span><span>${fmtMoney(totalPrice)}</span></div>
++  <div class="note">Preview only — press Pay in Live Cart to complete the transaction.</div>
+ </body>
+ </html>`;
+ 
+@@ -884,10 +894,19 @@
+     const ids = Object.keys(cart);
+ 
+     let totalUnits = 0;
+-    ids.forEach(id => totalUnits += cart[id].count);
++    let totalPrice = 0;
++    ids.forEach(id => {
++      totalUnits += cart[id].count;
++      const catalogEntry = productCatalog[id];
++      const price = (catalogEntry && catalogEntry.price) || 0;
++      totalPrice += price * cart[id].count;
++    });
+ 
+     document.getElementById('cart-unique-count').textContent = ids.length;
+     document.getElementById('cart-total-count').textContent = totalUnits;
++    document.getElementById('cart-total-price').textContent = fmtMoney(totalPrice);
++
++    if (dom.payBtn) dom.payBtn.disabled = ids.length === 0;
+ 
+     if (ids.length === 0) {
+       grid.innerHTML = '';
+@@ -900,6 +919,8 @@
+       const item = cart[id];
+       const catalogEntry = productCatalog[id];
+       const imageUrl = catalogEntry && catalogEntry.image_url;
++      const price = (catalogEntry && catalogEntry.price) || 0;
++      const name = (catalogEntry && catalogEntry.name && catalogEntry.name !== id) ? catalogEntry.name : `Product #${id}`;
+       const confPct = (item.bestConfidence * 100).toFixed(1);
+ 
+       return `
+@@ -909,13 +930,101 @@
+             : `<div class="cart-thumb-placeholder">#${id}</div>`
+           }
+           <div class="cart-item-body">
+-            <div class="cart-item-name">Product #${id}</div>
+-            <div class="cart-item-meta">Best match: ${confPct}%</div>
++            <div class="cart-item-name">${name}</div>
++            <div class="cart-item-meta">Best match: ${confPct}%${price ? ' · ' + fmtMoney(price) + ' ea' : ' · price not set'}</div>
+           </div>
+           <div class="cart-item-qty">×${item.count}</div>
+         </div>
+       `;
+     }).join('');
+   }
++
++  function fmtMoney(value) {
++    return '$' + (value || 0).toFixed(2);
++  }
++
++  async function onPay() {
++    const ids = Object.keys(cart);
++    if (ids.length === 0) {
++      dom.scanStatus.textContent = 'Cart is empty — nothing to pay.';
++      return;
++    }
++
++    const items = ids.map(id => ({ product_id: id, quantity: cart[id].count }));
++
++    dom.payBtn.disabled = true;
++    dom.payBtn.textContent = 'Processing...';
++
++    try {
++      const res = await fetch('/api/checkout', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({ items }),
++      });
++      const data = await res.json();
++
++      if (!res.ok || data.error) {
++        dom.scanStatus.textContent = 'Payment failed: ' + (data.error || 'unknown error');
++        return;
++      }
++
++      dom.scanStatus.textContent = `Paid — Transaction #${data.id}, ${fmtMoney(data.total)}`;
++      renderPaidReceipt(data);
++
++      cart = {};
++      pendingCounts = {};
++      confirmedProducts = new Set();
++      renderCart();
++    } catch (err) {
++      dom.scanStatus.textContent = 'Payment failed — network error.';
++      console.error(err);
++    } finally {
++      dom.payBtn.textContent = '💳 Pay';
++      dom.payBtn.disabled = Object.keys(cart).length === 0;
++    }
++  }
++
++  function renderPaidReceipt(txn) {
++    const rows = txn.items.map(i => `
++      <tr>
++        <td>${i.product_name}</td>
++        <td style="text-align:center;">${i.quantity}</td>
++        <td style="text-align:right;">${fmtMoney(i.unit_price)}</td>
++        <td style="text-align:right;">${fmtMoney(i.line_total)}</td>
++      </tr>`).join('');
++
++    const receiptHtml = `<!DOCTYPE html>
++<html>
++<head>
++<meta charset="utf-8">
++<title>Receipt #${txn.id} — ScanDesk OS</title>
++<style>
++  body { font-family: 'Courier New', monospace; max-width: 340px; margin: 24px auto; color: #111; }
++  h1 { font-size: 16px; text-align: center; margin-bottom: 0; }
++  .sub { text-align: center; font-size: 11px; color: #555; margin-top: 4px; }
++  table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
++  th, td { padding: 4px 2px; border-bottom: 1px dashed #999; }
++  th { text-align: left; font-size: 11px; text-transform: uppercase; color: #555; }
++  .totals { margin-top: 12px; font-size: 15px; display: flex; justify-content: space-between; font-weight: bold; border-top: 1px solid #333; padding-top: 8px; }
++  .paid-badge { text-align: center; margin-top: 10px; color: #16a34a; font-weight: bold; font-size: 12px; }
++</style>
++</head>
++<body>
++  <h1>ScanDesk OS</h1>
++  <div class="sub">Transaction #${txn.id} · ${new Date(txn.created_at * 1000).toLocaleString()}</div>
++  <table>
++    <thead><tr><th>Item</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Price</th><th style="text-align:right;">Total</th></tr></thead>
++    <tbody>${rows}</tbody>
++  </table>
++  <div class="totals"><span>Total</span><span>${fmtMoney(txn.total)}</span></div>
++  <div class="paid-badge">✅ PAID</div>
++</body>
++</html>`;
++
++    const receiptWindow = window.open('', '_blank');
++    if (!receiptWindow) return; // popup blocked -- status line already confirms payment
++    receiptWindow.document.write(receiptHtml);
++    receiptWindow.document.close();
++  }
+ </script>
+ {% endblock %}
+\ No newline at end of file
+diff --git a/templates/products.html b/templates/products.html
+index 79eb526..867c9f6 100644
+--- a/templates/products.html
++++ b/templates/products.html
+@@ -1,4 +1,5 @@
+ {% extends 'base.html' %}
++{% set active_page = "products" %}
+ 
+ {% block content %}
+ <style>
+@@ -132,6 +133,48 @@
+     font-size: 14px;
+   }
+ 
++  .product-name-input {
++    width: 100%;
++    margin-top: 6px;
++    padding: 5px 8px;
++    font-size: 12px;
++    border: 1px solid var(--border);
++    border-radius: 6px;
++    font-family: var(--font-sans);
++  }
++
++  .product-price-row {
++    display: flex;
++    align-items: center;
++    gap: 6px;
++    margin-top: 6px;
++  }
++
++  .product-price-row span { font-size: 12px; color: var(--text-muted); }
++
++  .product-price-input {
++    flex: 1;
++    padding: 5px 8px;
++    font-size: 12px;
++    border: 1px solid var(--border);
++    border-radius: 6px;
++    font-family: var(--font-mono);
++  }
++
++  .product-meta-save {
++    padding: 5px 8px;
++    font-size: 11px;
++  }
++
++  .product-meta-status {
++    font-size: 10px;
++    margin-top: 4px;
++    min-height: 12px;
++  }
++
++  .product-meta-status.success { color: var(--success); }
++  .product-meta-status.error { color: var(--danger); }
++
+   .product-stats {
+     margin-top: 8px;
+     display: flex;
+@@ -359,9 +402,55 @@
+             <span>Reference samples: <b>${p.reference_samples}</b></span>
+             <span>Embedding dim: <b>${p.embedding_dim}</b></span>
+           </div>
++          <input class="form-input product-name-input" data-id="${p.id}" data-field="name"
++            value="${p.name && p.name !== p.id ? p.name : ''}" placeholder="Display name (e.g. Whole Milk 1L)">
++          <div class="product-price-row">
++            <span>$</span>
++            <input class="form-input product-price-input" data-id="${p.id}" data-field="price" type="number" min="0" step="0.01"
++              value="${p.price || ''}" placeholder="0.00">
++            <button class="btn product-meta-save" data-id="${p.id}" type="button">Save</button>
++          </div>
++          <div class="product-meta-status" id="meta-status-${p.id}"></div>
+         </div>
+       </div>
+     `).join('');
++
++    grid.querySelectorAll('.product-meta-save').forEach(btn => {
++      btn.addEventListener('click', () => saveProductMeta(btn.dataset.id));
++    });
++  }
++
++  async function saveProductMeta(productId) {
++    const nameInput = document.querySelector(`.product-name-input[data-id="${productId}"]`);
++    const priceInput = document.querySelector(`.product-price-input[data-id="${productId}"]`);
++    const statusEl = document.getElementById(`meta-status-${productId}`);
++
++    const body = {};
++    if (nameInput.value.trim()) body.name = nameInput.value.trim();
++    if (priceInput.value !== '') body.price = priceInput.value;
++
++    statusEl.textContent = 'Saving...';
++    statusEl.className = 'product-meta-status';
++
++    try {
++      const res = await fetch(`/api/products/${productId}/meta`, {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify(body),
++      });
++      const data = await res.json();
++      if (!res.ok || data.error) {
++        statusEl.textContent = data.error || 'Failed to save.';
++        statusEl.className = 'product-meta-status error';
++        return;
++      }
++      statusEl.textContent = 'Saved — feeds revenue on the dashboard.';
++      statusEl.className = 'product-meta-status success';
++    } catch (err) {
++      statusEl.textContent = 'Network error.';
++      statusEl.className = 'product-meta-status error';
++      console.error(err);
++    }
+   }
+ 
+   loadProducts();

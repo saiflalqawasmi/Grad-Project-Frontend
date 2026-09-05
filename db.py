@@ -129,6 +129,20 @@ def revenue_since(timestamp):
         return {"revenue": round(row["revenue"], 2), "transaction_count": row["count"]}
 
 
+def all_time_summary():
+    """Lifetime totals -- distinct from revenue_since(today), which resets
+    daily. Used for the dashboard's all-time stats, which are real
+    historical figures pulled straight from the transactions table."""
+    info = revenue_since(0)
+    count = info["transaction_count"]
+    revenue = info["revenue"]
+    return {
+        "revenue": revenue,
+        "transaction_count": count,
+        "avg_transaction_value": round(revenue / count, 2) if count else 0.0,
+    }
+
+
 def all_transaction_totals():
     """Raw (created_at, total) pairs for every transaction -- used by
     StatsTracker.timeseries() to bucket revenue into the same hourly/daily

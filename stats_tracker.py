@@ -107,6 +107,7 @@ class StatsTracker:
 
             total_items = len(self._all_confidences)
             avg_basket_size = round(total_items / self._scan_count, 1) if self._scan_count else None
+            unique_products_scanned = len(self._per_product)
 
             products = []
             for product_id, data in self._per_product.items():
@@ -131,6 +132,7 @@ class StatsTracker:
         today_start = _start_of_today()
         revenue_info = db.revenue_since(today_start)
         top_products_by_revenue = db.revenue_by_product(limit=5)
+        all_time = db.all_time_summary()
 
         return {
             "overall_accuracy": overall,
@@ -142,6 +144,11 @@ class StatsTracker:
             "revenue_today": revenue_info["revenue"],
             "transactions_today": revenue_info["transaction_count"],
             "avg_basket_size": avg_basket_size,
+            "total_items_detected": total_items,
+            "unique_products_scanned": unique_products_scanned,
+            "all_time_revenue": all_time["revenue"],
+            "all_time_transactions": all_time["transaction_count"],
+            "avg_transaction_value": all_time["avg_transaction_value"],
             "products": products[:8],
             "top_products_by_revenue": top_products_by_revenue,
             "last_scan_items": self._last_scan_items,

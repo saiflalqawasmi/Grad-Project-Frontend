@@ -8,39 +8,88 @@
   <!-- Left Main Column -->
   <main class="main-content">
 
-    <!-- Top KPI Bar -->
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-label">Overall Model Accuracy</div>
-        <div class="kpi-value" id="kpi-overall-accuracy">--%</div>
-        <div class="kpi-trend trend-neutral" id="kpi-overall-accuracy-trend">Awaiting scans</div>
+    <!-- Key Statistics -->
+    <section class="card">
+      <div class="card-title" style="margin-bottom: 16px;">Key Statistics</div>
+
+      <div class="kpi-section">
+        <div class="kpi-section-label">Model Performance</div>
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Overall Model Accuracy</div>
+            <div class="kpi-value" id="kpi-overall-accuracy">--%</div>
+            <div class="kpi-trend trend-neutral" id="kpi-overall-accuracy-trend">Awaiting scans</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Last Scan Confidence</div>
+            <div class="kpi-value" id="kpi-last-confidence">--%</div>
+            <div class="kpi-trend trend-neutral" id="kpi-last-confidence-trend">No scans yet</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Inference Speed</div>
+            <div class="kpi-value" id="kpi-inference-speed">--ms</div>
+            <div class="kpi-trend trend-neutral">Real-time latency</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Unique Products Scanned</div>
+            <div class="kpi-value" id="kpi-unique-products">0</div>
+            <div class="kpi-trend trend-neutral">Distinct items detected</div>
+          </div>
+        </div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Last Scan Confidence</div>
-        <div class="kpi-value" id="kpi-last-confidence">--%</div>
-        <div class="kpi-trend trend-neutral" id="kpi-last-confidence-trend">No scans yet</div>
+
+      <div class="kpi-section">
+        <div class="kpi-section-label">Today's Activity</div>
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Scans Today</div>
+            <div class="kpi-value" id="kpi-scans-today">0</div>
+            <div class="kpi-trend trend-neutral" id="kpi-scans-trend">Since page load</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Avg Basket Size</div>
+            <div class="kpi-value" id="kpi-basket-size">--</div>
+            <div class="kpi-trend trend-neutral">Items per scan</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Revenue Today</div>
+            <div class="kpi-value" id="kpi-revenue-today">$0.00</div>
+            <div class="kpi-trend trend-neutral" id="kpi-revenue-trend">From completed transactions</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Transactions Today</div>
+            <div class="kpi-value" id="kpi-transactions-today">0</div>
+            <div class="kpi-trend trend-neutral">Completed checkouts</div>
+          </div>
+        </div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Inference Speed</div>
-        <div class="kpi-value" id="kpi-inference-speed">--ms</div>
-        <div class="kpi-trend trend-neutral">Real-time Latency</div>
+
+      <div class="kpi-section">
+        <div class="kpi-section-label">All-Time Totals</div>
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">All-Time Revenue</div>
+            <div class="kpi-value" id="kpi-alltime-revenue">$0.00</div>
+            <div class="kpi-trend trend-neutral">Lifetime, from checkouts</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Total Transactions</div>
+            <div class="kpi-value" id="kpi-alltime-transactions">0</div>
+            <div class="kpi-trend trend-neutral">Lifetime checkouts</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Avg Transaction Value</div>
+            <div class="kpi-value" id="kpi-avg-transaction">$0.00</div>
+            <div class="kpi-trend trend-neutral">Per completed order</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Items in Catalog</div>
+            <div class="kpi-value" id="kpi-catalog-size">--</div>
+            <div class="kpi-trend trend-neutral">Registered products</div>
+          </div>
+        </div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Scans Today</div>
-        <div class="kpi-value" id="kpi-scans-today">0</div>
-        <div class="kpi-trend trend-neutral" id="kpi-scans-trend">Since page load</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Revenue Today</div>
-        <div class="kpi-value" id="kpi-revenue-today">$0.00</div>
-        <div class="kpi-trend trend-neutral" id="kpi-revenue-trend">From completed transactions</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Avg Basket Size</div>
-        <div class="kpi-value" id="kpi-basket-size">--</div>
-        <div class="kpi-trend trend-neutral">Items per scan</div>
-      </div>
-    </div>
+    </section>
 
     <!-- Live Camera Viewport Box -->
     <section class="card camera-card">
@@ -96,38 +145,6 @@
 
       <div class="scan-list" id="last-scan-list">
         <div style="text-align: center; color: var(--text-muted); padding: 20px 0; font-size: 13px;">No scans yet — run a scan to see live results here.</div>
-      </div>
-    </section>
-
-    <!-- AI Sales Forecast & Restock Suggestions -->
-    <section class="card">
-      <div class="card-header">
-        <div class="card-title">
-          <span>🤖 AI Sales Forecast &amp; Restock Suggestions</span>
-        </div>
-      </div>
-
-      <div id="forecast-highlight-container"></div>
-
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Product</th>
-            <th>Trend</th>
-            <th>Predicted Demand (7d)</th>
-            <th>Predicted Revenue (7d)</th>
-            <th>Suggested Reorder Qty</th>
-          </tr>
-        </thead>
-        <tbody id="forecast-body">
-          <tr>
-            <td colspan="5" style="text-align: center; color: var(--text-muted);">Gathering scan data...</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div class="forecast-note">
-        Based on live scan volume (no separate sales feed exists yet) — a simple trend projection over the last 14 days, with a 7-day lead time and 25% safety buffer built into the reorder quantity. Treat as a starting estimate, not a guarantee.
       </div>
     </section>
 
@@ -199,9 +216,9 @@
       </table>
     </section>
 
-    <!-- Smart Alerts -->
+    <!-- Model Alerts -->
     <section class="card">
-      <div class="card-title" style="margin-bottom: 12px;">Smart Alerts</div>
+      <div class="card-title" style="margin-bottom: 12px;">Model Alerts</div>
       <div class="alert-list" id="alert-list">
         <div class="alert-item" style="color: var(--text-muted);">No alerts yet — waiting on scan data.</div>
       </div>
@@ -442,8 +459,7 @@
       return;
     }
 
-    _lastStats = data;
-    if (_lastPred) renderAlerts(_lastPred, _lastStats);
+    renderModelAlerts(data);
 
     document.getElementById('kpi-overall-accuracy').textContent = fmtPct(data.overall_accuracy);
     document.getElementById('kpi-overall-accuracy-trend').textContent =
@@ -459,6 +475,12 @@
     document.getElementById('kpi-revenue-today').textContent = fmtMoney(data.revenue_today);
     document.getElementById('kpi-basket-size').textContent =
       (data.avg_basket_size === null || data.avg_basket_size === undefined) ? '--' : data.avg_basket_size;
+    document.getElementById('kpi-transactions-today').textContent = (data.transactions_today || 0).toLocaleString();
+    document.getElementById('kpi-unique-products').textContent = (data.unique_products_scanned || 0).toLocaleString();
+
+    document.getElementById('kpi-alltime-revenue').textContent = fmtMoney(data.all_time_revenue);
+    document.getElementById('kpi-alltime-transactions').textContent = (data.all_time_transactions || 0).toLocaleString();
+    document.getElementById('kpi-avg-transaction').textContent = fmtMoney(data.avg_transaction_value);
 
     document.getElementById('gauge-accuracy-value').textContent = fmtPct(data.overall_accuracy);
     document.getElementById('accuracy-progress-fill').style.width =
@@ -473,75 +495,9 @@
     renderTelemetry(data.events);
   }
 
-  function trendBadgeClass(trend) {
-    if (trend === 'rising') return 'badge-success';
-    if (trend === 'falling') return 'badge-danger';
-    return 'badge-neutral';
-  }
-
-  function trendLabel(trend) {
-    if (trend === 'rising') return '▲ Rising';
-    if (trend === 'falling') return '▼ Falling';
-    return '● Steady';
-  }
-
-  function renderForecastHighlight(pred) {
-    const container = document.getElementById('forecast-highlight-container');
-    if (!pred.has_data || !pred.top_seller) {
-      container.innerHTML = '';
-      return;
-    }
-    const top = pred.items[0];
-    const revenueText = top.predicted_revenue ? `, ~${fmtMoney(top.predicted_revenue)} predicted revenue` : '';
-    container.innerHTML = `
-      <div class="forecast-highlight">
-        <div class="forecast-highlight-icon">🏆</div>
-        <div>
-          <div class="forecast-highlight-label">Best-selling item (last ${pred.window_days} days)</div>
-          <div class="forecast-highlight-value">${top.name} — ${top.scans_recent} scans, ~${top.predicted_demand} predicted over next ${pred.forecast_days} days${revenueText}</div>
-        </div>
-      </div>
-    `;
-  }
-
-  function renderForecastTable(pred) {
-    const body = document.getElementById('forecast-body');
-    if (!pred.has_data || !pred.items || pred.items.length === 0) {
-      body.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Gathering scan data...</td></tr>';
-      return;
-    }
-    body.innerHTML = pred.items.map(item => `
-      <tr>
-        <td>${item.name}</td>
-        <td><span class="badge ${trendBadgeClass(item.trend)}">${trendLabel(item.trend)}</span></td>
-        <td>${item.predicted_demand}</td>
-        <td>${item.predicted_revenue ? fmtMoney(item.predicted_revenue) : '<span style="color: var(--text-subtle);">Set price</span>'}</td>
-        <td style="font-weight: 700;">${item.suggested_reorder_qty}</td>
-      </tr>
-    `).join('');
-  }
-
-  function renderAlerts(pred, stats) {
+  function renderModelAlerts(stats) {
     const list = document.getElementById('alert-list');
     const alerts = [];
-
-    if (pred.has_data) {
-      pred.items.forEach(item => {
-        if (item.trend === 'rising') {
-          alerts.push({
-            level: 'success',
-            icon: '📈',
-            text: `${item.name} is trending up — consider stocking ${item.suggested_reorder_qty} units.`
-          });
-        } else if (item.trend === 'falling') {
-          alerts.push({
-            level: 'warning',
-            icon: '📉',
-            text: `${item.name} demand is dropping — consider a smaller next order.`
-          });
-        }
-      });
-    }
 
     if (stats && stats.products) {
       stats.products.forEach(p => {
@@ -568,29 +524,21 @@
     `).join('');
   }
 
-  let _lastStats = null;
-  let _lastPred = null;
-
-  async function refreshPredictions() {
-    let pred;
+  async function refreshCatalogSize() {
     try {
-      const res = await fetch('/api/predictions');
-      pred = await res.json();
+      const res = await fetch('/api/products');
+      const data = await res.json();
+      document.getElementById('kpi-catalog-size').textContent = (data.count || 0).toLocaleString();
     } catch (err) {
-      console.error('Failed to load /api/predictions', err);
-      return;
+      console.error('Failed to load /api/products', err);
     }
-    _lastPred = pred;
-    renderForecastHighlight(pred);
-    renderForecastTable(pred);
-    renderAlerts(pred, _lastStats);
   }
 
   refreshStats();
-  refreshPredictions();
   refreshTimeseries();
+  refreshCatalogSize();
   setInterval(refreshStats, 5000);
-  setInterval(refreshPredictions, 10000);
   setInterval(refreshTimeseries, 15000);
+  setInterval(refreshCatalogSize, 60000);
 </script>
 {% endblock %}

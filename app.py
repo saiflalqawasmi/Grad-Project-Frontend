@@ -143,6 +143,12 @@ def dashboard():
     return render_template('dashboard.html', camera_connected=is_connected())
 
 
+@app.route("/forecast")
+@manager_or_admin_required
+def forecast_page():
+    return render_template('forecast.html')
+
+
 @app.route("/products")
 @manager_or_admin_required
 def products_page():
